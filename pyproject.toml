@@ -1,0 +1,26 @@
+[project]
+name = "customer-churn-agentic-mlops"
+version = "0.1.0"
+description = "Auditable DataOps, MLOps, and constrained LLMOps lifecycle for synthetic customer churn."
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+dependencies = []
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3,<10",
+    "ruff>=0.11,<1",
+]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+addopts = [
+    "--strict-config",
+    "--strict-markers",
+]
+testpaths = ["tests"]
+
+[tool.ruff]
+extend = "./config/ruff.toml"

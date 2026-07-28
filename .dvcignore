@@ -1,0 +1,7 @@
+# Local development environments and caches are never DVC stage inputs.
+.git/
+.venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+

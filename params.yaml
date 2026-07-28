@@ -1,0 +1,24 @@
+project:
+  random_seed: 42
+
+data:
+  target_column: churned
+  identifier_column: customer_id
+
+experiments:
+  maximum_candidates: 3
+  primary_metric: roc_auc
+
+promotion:
+  minimum_roc_auc: 0.80
+  minimum_f1: 0.70
+  minimum_recall: 0.65
+  minimum_roc_auc_improvement: 0.005
+
+registry:
+  model_name: customer-churn
+
+api:
+  host: 0.0.0.0
+  port: 8000
+
