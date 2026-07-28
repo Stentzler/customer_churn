@@ -24,6 +24,7 @@ addopts = [
     "--strict-config",
     "--strict-markers",
 ]
+pythonpath = ["."]
 testpaths = ["tests"]
 
 [tool.ruff]

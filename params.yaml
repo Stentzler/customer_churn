@@ -5,6 +5,45 @@ data:
   target_column: churned
   identifier_column: customer_id
 
+data_contract:
+  schema_version: "1.0"
+  strict: true
+  ordered: true
+  minimum_batch_size: 50
+  maximum_failure_examples: 10
+  numeric_ranges:
+    age:
+      minimum: 18
+      maximum: 100
+    tenure_months:
+      minimum: 0
+      maximum: 120
+    monthly_spend:
+      minimum: 0.0
+      maximum: 500.0
+    support_tickets_90d:
+      minimum: 0
+      maximum: 20
+    late_payments_12m:
+      minimum: 0
+      maximum: 12
+    usage_hours_monthly:
+      minimum: 0.0
+      maximum: 300.0
+  allowed_categories:
+    plan_type:
+      - basic
+      - standard
+      - premium
+    region:
+      - north
+      - south
+      - east
+      - west
+  target_values:
+    - 0
+    - 1
+
 experiments:
   maximum_candidates: 3
   primary_metric: roc_auc
@@ -21,4 +60,3 @@ registry:
 api:
   host: 0.0.0.0
   port: 8000
-
