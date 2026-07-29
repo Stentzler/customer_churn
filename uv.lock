@@ -357,6 +357,7 @@ dependencies = [
     { name = "pandas" },
     { name = "pandera", extra = ["pandas"] },
     { name = "pyyaml" },
+    { name = "scikit-learn" },
 ]
 
 [package.dev-dependencies]
@@ -372,6 +373,7 @@ requires-dist = [
     { name = "pandas", specifier = ">=2.2,<3" },
     { name = "pandera", extras = ["pandas"], specifier = ">=0.24,<1" },
     { name = "pyyaml", specifier = ">=6,<7" },
+    { name = "scikit-learn", specifier = ">=1.6,<2" },
 ]
 
 [package.metadata.requires-dev]

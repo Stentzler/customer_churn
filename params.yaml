@@ -63,6 +63,17 @@ experiments:
   maximum_candidates: 3
   primary_metric: roc_auc
 
+training:
+  validation_fraction: 0.20
+  models:
+    logistic_regression:
+      C: 1.0
+      max_iter: 1000
+    random_forest:
+      n_estimators: 200
+      max_depth: 8
+      min_samples_leaf: 2
+
 promotion:
   minimum_roc_auc: 0.80
   minimum_f1: 0.70
