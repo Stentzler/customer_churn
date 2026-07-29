@@ -95,8 +95,7 @@ stages:
     cmd: uv run python -m src.data.curate
     deps:
       - data/reference/reference.csv
-      - data/accepted/normal.csv
-      - data/accepted/drifted.csv
+      - data/accepted
       - src/data/curate.py
       - src/data/schema.py
       - src/data/settings.py

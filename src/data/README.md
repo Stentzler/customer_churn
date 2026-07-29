@@ -1052,20 +1052,62 @@ batch.to_csv(output, index=False, lineterminator='\n', float_format='%.2f')
 Process and analyze it:
 
 ```bash
-make process-batch INPUT=data/incoming/batch-001.csv
-make drift-data CURRENT=data/accepted/batch-001.csv
-make curate-data
-make profile-data
+make pipeline INPUT=data/incoming/batch-001.csv
 ```
 
-Important limitation: the default `dvc.yaml` explicitly tracks `normal.csv` and
-`drifted.csv`. An ad hoc `batch-001.csv` is handled by the application commands but
-is not automatically registered as a new DVC stage or output. To make it part of
-the reproducible DAG, add explicit validation/drift dependencies and outputs or
-introduce a reviewed DVC `foreach` batch-registration design.
+The local orchestrator performs these operations in order:
 
-In a real system, an ingestion workflow would assign immutable batch identifiers
-and update the pipeline manifest automatically or invoke a parameterized pipeline.
+1. Validate the exact input path and write JSON and Markdown quality reports.
+2. Copy valid data to `data/accepted/`, or invalid data to `data/rejected/`.
+3. Stop immediately with exit code `1` when the batch is invalid.
+4. Compare an accepted batch with the reference data and persist drift reports.
+5. Run `dvc add` for the raw batch, accepted copy, validation reports, and drift
+   reports. Their `.dvc` files are metadata that should be committed to Git.
+6. Run `dvc repro profile train`. The `curate` stage depends on the complete
+   `data/accepted/` directory, so a new accepted filename invalidates curation,
+   profiling, and training.
+7. Compare the profile's curated `data_version` with the last successful MLflow
+   tracking receipt.
+8. Skip remote registration when the effective curated data is unchanged.
+9. Otherwise, track both candidates and register the selected candidate in DagsHub.
+
+For this study workflow, every valid batch that changes the curated dataset causes
+retraining. Feature and target drift remain separate, recorded evidence; they do
+not block this manual local demonstration. A future automated policy can use the
+structured `feature_drift.is_significant` decision to skip normal batches.
+
+Use a unique, immutable delivery filename such as a timestamp or source batch ID:
+
+```text
+data/incoming/customer-churn-2026-07-29-001.csv
+```
+
+Reusing a filename is supported, but unique names preserve clearer audit history.
+If a previously accepted filename is replaced by invalid data, ingestion removes
+the stale accepted copy before stopping the training path.
+
+### DVC and Git After a Successful Batch
+
+`dvc add` stores file contents in `.dvc/cache/` and writes small `.dvc` pointer
+files. The actual CSV and generated reports remain ignored by Git. Review and commit
+the metadata and pipeline state:
+
+```bash
+git status
+git add data/**/*.dvc reports/**/*.dvc dvc.lock
+git commit -m "Process customer churn batch"
+```
+
+The current repository has no DVC remote configured. Therefore this workflow
+versions data locally but cannot upload the cache yet. After a DagsHub DVC remote is
+configured, publish the cached objects with:
+
+```bash
+uv run dvc push
+```
+
+MLflow model runs and model versions are already sent directly to DagsHub through
+`MLFLOW_TRACKING_URI`; that storage path is separate from the DVC cache.
 
 ## Common Workflows
 

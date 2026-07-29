@@ -92,8 +92,8 @@ stages:
       size: 11753
     - path: src/data/ingest.py
       hash: md5
-      md5: 72eedcd992e15ccf0d856758abc0236c
-      size: 6184
+      md5: 3ab120d9dbd7afc0d541eabc9dfa258a
+      size: 6805
     - path: src/data/schema.py
       hash: md5
       md5: a328e73b303d5e0a0d53bb34d32cd3af
@@ -176,8 +176,8 @@ stages:
       size: 11684
     - path: src/data/ingest.py
       hash: md5
-      md5: 72eedcd992e15ccf0d856758abc0236c
-      size: 6184
+      md5: 3ab120d9dbd7afc0d541eabc9dfa258a
+      size: 6805
     - path: src/data/schema.py
       hash: md5
       md5: a328e73b303d5e0a0d53bb34d32cd3af
@@ -420,14 +420,11 @@ stages:
   curate:
     cmd: uv run python -m src.data.curate
     deps:
-    - path: data/accepted/drifted.csv
+    - path: data/accepted
       hash: md5
-      md5: 1adf3d600c7f08b56b000aff6a2c6279
-      size: 11684
-    - path: data/accepted/normal.csv
-      hash: md5
-      md5: 4e9f6a85e50ee7aa092097b522a9d0ef
-      size: 11753
+      md5: 2cdcafb8d231907b4d6f95cf60bc34c7.dir
+      size: 23438
+      nfiles: 3
     - path: data/reference/reference.csv
       hash: md5
       md5: 63fef53949e3c7e52c021e0417015fde

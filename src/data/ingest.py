@@ -81,6 +81,13 @@ def process_incoming_batch(
         BatchDisposition.ACCEPTED if validation.is_valid else BatchDisposition.REJECTED
     )
     routed_path = data_root / disposition.value / input_path.name
+    opposite_disposition = (
+        BatchDisposition.REJECTED
+        if disposition is BatchDisposition.ACCEPTED
+        else BatchDisposition.ACCEPTED
+    )
+    stale_routed_path = data_root / opposite_disposition.value / input_path.name
+    _remove_stale_route(stale_routed_path)
     _copy_atomically(input_path, routed_path)
 
     return IncomingBatchResult(
@@ -183,6 +190,16 @@ def _copy_atomically(source_path: Path, destination_path: Path) -> None:
     except OSError as error:
         temporary_path.unlink(missing_ok=True)
         message = f"Cannot route incoming batch to '{destination_path}': {error}"
+        raise IncomingBatchOperationalError(message) from error
+
+
+def _remove_stale_route(path: Path) -> None:
+    """Remove an obsolete opposite disposition for the same delivery name."""
+
+    try:
+        path.unlink(missing_ok=True)
+    except OSError as error:
+        message = f"Cannot remove stale routed batch '{path}': {error}"
         raise IncomingBatchOperationalError(message) from error
 
 

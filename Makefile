@@ -1,4 +1,4 @@
-.PHONY: install lint test generate-data process-batch curate-data profile-data drift-data data-pipeline train-models track-models
+.PHONY: install lint test generate-data process-batch curate-data profile-data drift-data data-pipeline train-models track-models pipeline
 
 install:
 	uv sync --locked
@@ -33,3 +33,6 @@ train-models:
 
 track-models:
 	uv run python -m src.training.registry
+
+pipeline:
+	uv run python -m src.workflow.local_pipeline --input "$(INPUT)"

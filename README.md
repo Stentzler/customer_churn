@@ -10,6 +10,7 @@ synthetic-data scenarios, and data-contract validation.
 Detailed subsystem documentation:
 
 - [DataOps guide](./data/README.md)
+- [Training and MLflow guide](./src/training/README.md)
 
 ## Development
 
@@ -88,6 +89,18 @@ DVC records code, data, and parameter dependencies in `dvc.yaml` and resolved
 content hashes in `dvc.lock`. Generated datasets and reports are stored in the local
 `.dvc/cache/`; no account or remote storage is required. Repeating the command
 reuses unchanged stages.
+
+Run one newly delivered CSV through the complete local lifecycle:
+
+```bash
+make pipeline INPUT=data/incoming/batch-001.csv
+```
+
+The command validates and routes the batch, creates drift reports, versions the
+batch artifacts in the local DVC cache, reproduces curation through training, and
+registers the selected candidate in DagsHub. Invalid data stops before curation.
+When the resulting curated `data_version` was already registered by the previous
+successful execution, remote tracking is skipped to avoid duplicate model versions.
 
 Configuration that is safe to version belongs in `params.yaml`. Copy variable names
 from `.env.example` into a local `.env` file when integrations are introduced. Never

@@ -63,6 +63,32 @@ def test_invalid_incoming_batch_is_copied_only_to_rejected(
     assert result.reports.markdown_path.is_file()
 
 
+def test_changed_invalid_batch_removes_stale_accepted_copy(
+    tmp_path: Path,
+    valid_customer_dataframe: pd.DataFrame,
+) -> None:
+    input_path = _write_incoming_csv(
+        tmp_path,
+        "changed.csv",
+        valid_customer_dataframe,
+    )
+    process_incoming_batch(input_path, PARAMS_PATH, tmp_path, tmp_path / "reports")
+
+    invalid_dataframe = valid_customer_dataframe.copy()
+    invalid_dataframe.loc[0, "region"] = "unsupported-region"
+    invalid_dataframe.to_csv(input_path, index=False)
+    result = process_incoming_batch(
+        input_path,
+        PARAMS_PATH,
+        tmp_path,
+        tmp_path / "reports",
+    )
+
+    assert result.disposition is BatchDisposition.REJECTED
+    assert not (tmp_path / "accepted" / "changed.csv").exists()
+    assert (tmp_path / "rejected" / "changed.csv").is_file()
+
+
 def test_batch_outside_incoming_directory_is_rejected(
     tmp_path: Path,
     valid_customer_dataframe: pd.DataFrame,

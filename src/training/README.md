@@ -639,18 +639,32 @@ Implemented:
 - Atomic local artifacts.
 - DVC versioning and caching.
 - Reload-and-predict integration testing.
+- Per-candidate MLflow experiment runs.
+- DagsHub remote tracking.
+- Selected-candidate model registration.
+- Model-version lineage tags.
+- Local CSV-to-registration orchestration.
 
 Not implemented yet:
 
-- MLflow experiment runs.
-- DagsHub remote tracking.
-- Model registration.
 - Champion alias management.
 - Fixed-test promotion comparison.
 - Prediction-threshold optimization.
 - LLM-generated plans and automatic fallback routing.
 - FastAPI serving and Docker publication.
 
-The next major phase is MLflow and DagsHub integration. Local model files and JSON
-metrics will become tracked runs with code, data, plan, parameter, metric, and
-artifact lineage.
+Registration intentionally creates a candidate model version with
+`candidate_status=selected_not_promoted`. It does not assign the `champion` alias.
+Champion comparison and promotion remain a later deterministic phase.
+
+Run the complete local lifecycle for a new delivery:
+
+```bash
+make pipeline INPUT=data/incoming/batch-001.csv
+```
+
+If validation, drift analysis, DVC reproduction, training, MLflow logging, or model
+registration fails, the command returns a nonzero status. DagsHub registration is
+also skipped when the curated profile has the same `data_version` recorded by the
+last successful tracking receipt in
+`artifacts/metrics/mlflow-tracking.json`.

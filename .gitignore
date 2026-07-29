@@ -29,12 +29,14 @@ data/**
 !data/**/
 !data/**/.gitkeep
 !data/README.md
+!data/**/*.dvc
 artifacts/**
 !artifacts/**/
 !artifacts/**/.gitkeep
 reports/**
 !reports/**/
 !reports/**/.gitkeep
+!reports/**/*.dvc
 
 # ML and pipeline tooling
 .dvc/cache/
