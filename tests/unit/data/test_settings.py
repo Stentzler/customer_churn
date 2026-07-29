@@ -5,9 +5,11 @@ import yaml
 from src.data.settings import (
     DataContractConfigurationError,
     DataGenerationConfig,
+    DriftConfig,
     NumericRange,
     load_data_contract,
     load_data_generation,
+    load_drift_config,
 )
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
@@ -89,6 +91,30 @@ def test_unknown_generation_scenario_is_rejected() -> None:
 
     with pytest.raises(ValueError, match="Unknown dataset scenario 'future'"):
         generation.seed_for("future")
+
+
+def test_load_drift_config_from_versioned_params() -> None:
+    assert load_drift_config(PARAMS_PATH) == DriftConfig(
+        reference_path=Path("data/reference/reference.csv"),
+        feature_drift_share_threshold=0.25,
+    )
+
+
+@pytest.mark.parametrize("threshold", [0, -0.1, 1.1])
+def test_invalid_feature_drift_share_threshold_is_rejected(
+    tmp_path: Path,
+    threshold: float,
+) -> None:
+    params = _load_versioned_params()
+    drift = _get_mapping(params, "drift")
+    drift["feature_drift_share_threshold"] = threshold
+    params_path = _write_params(tmp_path, params)
+
+    with pytest.raises(
+        DataContractConfigurationError,
+        match="must be greater than 0 and at most 1",
+    ):
+        load_drift_config(params_path)
 
 
 def test_missing_data_contract_is_rejected(tmp_path: Path) -> None:

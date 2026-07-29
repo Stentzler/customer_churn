@@ -56,6 +56,12 @@ DATASET_SCENARIOS = frozenset(
         "invalid",
     }
 )
+DRIFT_KEYS = frozenset(
+    {
+        "reference_path",
+        "feature_drift_share_threshold",
+    }
+)
 
 type NumericValue = int | float
 type StringMapping = dict[str, object]
@@ -108,6 +114,14 @@ class DataGenerationConfig:
                 f"Unknown dataset scenario '{scenario}'; expected one of: {supported}"
             )
             raise ValueError(message) from error
+
+
+@dataclass(frozen=True, slots=True)
+class DriftConfig:
+    """Validated policy controlling reference-based drift evaluation."""
+
+    reference_path: Path
+    feature_drift_share_threshold: float
 
 
 def load_data_contract(params_path: Path) -> DataContractConfig:
@@ -185,6 +199,34 @@ def load_data_generation(params_path: Path) -> DataGenerationConfig:
             "data_generation.batch_rows",
         ),
         seed_offsets=MappingProxyType(seed_offsets),
+    )
+
+
+def load_drift_config(params_path: Path) -> DriftConfig:
+    """Load the fixed reference path and dataset-level feature drift gate."""
+
+    root = _load_yaml_mapping(params_path)
+    drift = _require_mapping(root.get("drift"), "drift")
+    _require_exact_keys(drift, DRIFT_KEYS, "drift")
+
+    threshold = _require_finite_number(
+        drift.get("feature_drift_share_threshold"),
+        "drift.feature_drift_share_threshold",
+    )
+    if not 0 < threshold <= 1:
+        message = (
+            "drift.feature_drift_share_threshold must be greater than 0 and at most 1"
+        )
+        raise DataContractConfigurationError(message)
+
+    return DriftConfig(
+        reference_path=Path(
+            _require_non_empty_string(
+                drift.get("reference_path"),
+                "drift.reference_path",
+            )
+        ),
+        feature_drift_share_threshold=float(threshold),
     )
 
 

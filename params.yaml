@@ -55,6 +55,10 @@ data_contract:
     - 0
     - 1
 
+drift:
+  reference_path: data/reference/reference.csv
+  feature_drift_share_threshold: 0.25
+
 experiments:
   maximum_candidates: 3
   primary_metric: roc_auc

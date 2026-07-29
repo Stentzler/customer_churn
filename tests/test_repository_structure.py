@@ -24,6 +24,7 @@ def test_generated_output_directories_exist() -> None:
         "data/rejected",
         "data/test",
         "reports/data-quality",
+        "reports/data-profile",
         "reports/drift",
         "reports/training",
     )

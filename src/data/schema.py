@@ -12,6 +12,7 @@ import pandera.pandas as pa
 from src.data.settings import DataContractConfig
 
 CUSTOMER_IDENTIFIER_COLUMN = "customer_id"
+CUSTOMER_TARGET_COLUMN = "churned"
 CUSTOMER_CHURN_COLUMNS = (
     CUSTOMER_IDENTIFIER_COLUMN,
     "age",
@@ -22,7 +23,7 @@ CUSTOMER_CHURN_COLUMNS = (
     "usage_hours_monthly",
     "plan_type",
     "region",
-    "churned",
+    CUSTOMER_TARGET_COLUMN,
 )
 
 

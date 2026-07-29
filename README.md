@@ -54,6 +54,26 @@ Curation reads only `data/reference/reference.csv` and sorted CSV files directly
 under `data/accepted/`. Duplicate customer identifiers keep the row from the last
 accepted filename, and the fixed test dataset is excluded by the curation interface.
 
+Create the aggregate profile for the current curated training dataset:
+
+```bash
+make profile-data
+```
+
+The deterministic JSON report under `reports/data-profile/` contains schema,
+missing-value, distribution, summary-statistic, duplicate, and data-version
+information. It never contains customer rows or identifier values.
+
+Compare one accepted batch with the fixed reference dataset:
+
+```bash
+make drift-data CURRENT=data/accepted/normal.csv
+```
+
+Feature drift is evaluated independently from target drift. The command writes a
+stable structured JSON decision and an Evidently HTML visualization under
+`reports/drift/`.
+
 Configuration that is safe to version belongs in `params.yaml`. Copy variable names
 from `.env.example` into a local `.env` file when integrations are introduced. Never
 commit credentials.
