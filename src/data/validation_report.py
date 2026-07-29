@@ -85,12 +85,8 @@ def write_validation_reports(
         Paths to the two written report artifacts.
     """
 
+    report_paths = validation_report_paths(result.dataset_name, report_directory)
     report_directory.mkdir(parents=True, exist_ok=True)
-    report_stem = _report_stem(result.dataset_name)
-    report_paths = ValidationReportPaths(
-        json_path=report_directory / f"{report_stem}.validation.json",
-        markdown_path=report_directory / f"{report_stem}.validation.md",
-    )
     report_paths.json_path.write_text(
         render_validation_json(result),
         encoding="utf-8",
@@ -100,6 +96,19 @@ def write_validation_reports(
         encoding="utf-8",
     )
     return report_paths
+
+
+def validation_report_paths(
+    dataset_name: str,
+    report_directory: Path,
+) -> ValidationReportPaths:
+    """Calculate report paths without creating directories or files."""
+
+    report_stem = _report_stem(dataset_name)
+    return ValidationReportPaths(
+        json_path=report_directory / f"{report_stem}.validation.json",
+        markdown_path=report_directory / f"{report_stem}.validation.md",
+    )
 
 
 def _issue_payload(issue: ValidationIssue) -> dict[str, object]:

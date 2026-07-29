@@ -4,7 +4,7 @@ import pandas as pd
 import pytest
 from src.data.settings import DataContractConfig, load_data_contract
 
-PROJECT_ROOT = Path(__file__).resolve().parents[3]
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
 @pytest.fixture
