@@ -5,6 +5,17 @@ data:
   target_column: churned
   identifier_column: customer_id
 
+data_generation:
+  reference_rows: 1000
+  fixed_test_rows: 300
+  batch_rows: 200
+  seed_offsets:
+    reference: 0
+    fixed_test: 1
+    normal: 2
+    drifted: 3
+    invalid: 4
+
 data_contract:
   schema_version: "1.0"
   strict: true

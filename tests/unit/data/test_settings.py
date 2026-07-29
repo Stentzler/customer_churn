@@ -4,8 +4,10 @@ import pytest
 import yaml
 from src.data.settings import (
     DataContractConfigurationError,
+    DataGenerationConfig,
     NumericRange,
     load_data_contract,
+    load_data_generation,
 )
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
@@ -33,6 +35,60 @@ def test_load_data_contract_from_versioned_params() -> None:
         "west",
     )
     assert contract.target_values == (0, 1)
+
+
+def test_load_data_generation_from_versioned_params() -> None:
+    generation = load_data_generation(PARAMS_PATH)
+
+    assert generation == DataGenerationConfig(
+        random_seed=42,
+        reference_rows=1000,
+        fixed_test_rows=300,
+        batch_rows=200,
+        seed_offsets={
+            "reference": 0,
+            "fixed_test": 1,
+            "normal": 2,
+            "drifted": 3,
+            "invalid": 4,
+        },
+    )
+    assert generation.seed_for("reference") == 42
+    assert generation.seed_for("drifted") == 45
+
+
+def test_duplicate_generation_seed_offsets_are_rejected(tmp_path: Path) -> None:
+    params = _load_versioned_params()
+    generation = _get_mapping(params, "data_generation")
+    offsets = _get_mapping(generation, "seed_offsets")
+    offsets["normal"] = offsets["reference"]
+    params_path = _write_params(tmp_path, params)
+
+    with pytest.raises(
+        DataContractConfigurationError,
+        match="seed_offsets values must be unique",
+    ):
+        load_data_generation(params_path)
+
+
+def test_negative_project_seed_is_rejected(tmp_path: Path) -> None:
+    params = _load_versioned_params()
+    project = _get_mapping(params, "project")
+    project["random_seed"] = -1
+    params_path = _write_params(tmp_path, params)
+
+    with pytest.raises(
+        DataContractConfigurationError,
+        match=r"project\.random_seed must be a non-negative integer",
+    ):
+        load_data_generation(params_path)
+
+
+def test_unknown_generation_scenario_is_rejected() -> None:
+    generation = load_data_generation(PARAMS_PATH)
+
+    with pytest.raises(ValueError, match="Unknown dataset scenario 'future'"):
+        generation.seed_for("future")
 
 
 def test_missing_data_contract_is_rejected(tmp_path: Path) -> None:
