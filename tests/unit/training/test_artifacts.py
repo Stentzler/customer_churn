@@ -39,5 +39,7 @@ def test_persist_training_run_writes_independent_loadable_artifacts(
         for path in artifacts.metric_paths
     } == {"logistic_regression", "random_forest"}
     selection = json.loads(artifacts.selection_path.read_text(encoding="utf-8"))
+    failures = json.loads(artifacts.failures_path.read_text(encoding="utf-8"))
+    assert failures == {"failures": []}
     assert selection["selected_model"] == training_run.selected.model_name.value
     assert selection["primary_metric"] == "roc_auc"

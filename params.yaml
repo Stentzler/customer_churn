@@ -61,6 +61,7 @@ drift:
 
 experiments:
   maximum_candidates: 3
+  minimum_successful_candidates: 1
   primary_metric: roc_auc
 
 training:

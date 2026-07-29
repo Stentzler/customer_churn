@@ -19,6 +19,7 @@ def test_load_training_settings_from_versioned_params() -> None:
         random_seed=42,
         validation_fraction=0.20,
         maximum_candidates=3,
+        minimum_successful_candidates=1,
         primary_metric="roc_auc",
         logistic_regression=LogisticRegressionSettings(
             regularization_strength=1.0,
@@ -78,6 +79,18 @@ def test_unsupported_primary_metric_is_rejected(tmp_path: Path) -> None:
     with pytest.raises(
         TrainingConfigurationError,
         match="primary_metric must be one of",
+    ):
+        load_training_settings(_write_params(tmp_path, params))
+
+
+def test_minimum_successful_candidates_cannot_exceed_limit(tmp_path: Path) -> None:
+    params = _load_versioned_params()
+    experiments = _get_mapping(params, "experiments")
+    experiments["minimum_successful_candidates"] = 4
+
+    with pytest.raises(
+        TrainingConfigurationError,
+        match="cannot exceed",
     ):
         load_training_settings(_write_params(tmp_path, params))
 

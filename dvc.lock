@@ -572,18 +572,30 @@ stages:
   train:
     cmd: uv run python -m src.training.train
     deps:
+    - path: artifacts/experiment-plans/fallback.json
+      hash: md5
+      md5: d4da6761f21d116880f7c09605bb266e
+      size: 684
     - path: data/curated/training.csv
       hash: md5
       md5: 151622acf53bb9804a37ce6a6d9abb8f
       size: 81443
+    - path: src/agent/plan_validator.py
+      hash: md5
+      md5: 0d15314df56587b6d416ab64919fb2b9
+      size: 2827
+    - path: src/agent/schemas.py
+      hash: md5
+      md5: cd8ddf509b5893729732f659d517e8fe
+      size: 1204
     - path: src/training/artifacts.py
       hash: md5
-      md5: d0026844f81325ecde96edda60ee023c
-      size: 3584
+      md5: 49cd046ce32e4a11c05cb3eca00986b0
+      size: 4008
     - path: src/training/catalog.py
       hash: md5
-      md5: ba81bb102edcbd402ea7f3a7e0d5ab75
-      size: 2229
+      md5: 603d50032bf1c71381a800434e9a37d2
+      size: 7326
     - path: src/training/evaluate.py
       hash: md5
       md5: e66513b50ef009522b86e5081c5cf43a
@@ -594,16 +606,17 @@ stages:
       size: 2195
     - path: src/training/settings.py
       hash: md5
-      md5: 29daf8d3eafaa5e83a12ac58955e47fc
-      size: 8471
+      md5: 22a8b2bfc85e152789aedc3634fa66b5
+      size: 9053
     - path: src/training/train.py
       hash: md5
-      md5: 7989c06a4b708b6af1cea6b5130f62b2
-      size: 11633
+      md5: 759998933d0d5709045a7f2e5f40fc49
+      size: 14513
     params:
       params.yaml:
         experiments:
           maximum_candidates: 3
+          minimum_successful_candidates: 1
           primary_metric: roc_auc
         project.random_seed: 42
         training:
@@ -617,14 +630,18 @@ stages:
               max_depth: 8
               min_samples_leaf: 2
     outs:
+    - path: artifacts/metrics/failures.json
+      hash: md5
+      md5: c4ebd5fbc2f58e550bc4a5e6eaeee37c
+      size: 21
     - path: artifacts/metrics/logistic_regression.json
       hash: md5
-      md5: e7b14535c84247c579f4938b76edd200
-      size: 395
+      md5: dc3c3e07a83ec75ae389b8ac75787239
+      size: 351
     - path: artifacts/metrics/random_forest.json
       hash: md5
-      md5: 1060236f075859e6e6d9137c088197eb
-      size: 389
+      md5: e86c1119672b2dce0cfe1243dda0ca97
+      size: 347
     - path: artifacts/metrics/selection.json
       hash: md5
       md5: 862231307195f8cf442c164913dc94a8
@@ -637,3 +654,44 @@ stages:
       hash: md5
       md5: 5f3f3d98d06068e04738fbdfb4c6633f
       size: 3038523
+  fallback_plan:
+    cmd: uv run python -m src.agent.planner
+    deps:
+    - path: src/agent/planner.py
+      hash: md5
+      md5: a3a8c820653157e7190413746bff2fae
+      size: 3973
+    - path: src/agent/schemas.py
+      hash: md5
+      md5: cd8ddf509b5893729732f659d517e8fe
+      size: 1204
+    - path: src/training/catalog.py
+      hash: md5
+      md5: 603d50032bf1c71381a800434e9a37d2
+      size: 7326
+    - path: src/training/settings.py
+      hash: md5
+      md5: 22a8b2bfc85e152789aedc3634fa66b5
+      size: 9053
+    params:
+      params.yaml:
+        experiments:
+          maximum_candidates: 3
+          minimum_successful_candidates: 1
+          primary_metric: roc_auc
+        project.random_seed: 42
+        training:
+          validation_fraction: 0.2
+          models:
+            logistic_regression:
+              C: 1.0
+              max_iter: 1000
+            random_forest:
+              n_estimators: 200
+              max_depth: 8
+              min_samples_leaf: 2
+    outs:
+    - path: artifacts/experiment-plans/fallback.json
+      hash: md5
+      md5: d4da6761f21d116880f7c09605bb266e
+      size: 684

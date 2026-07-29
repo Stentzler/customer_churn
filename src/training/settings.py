@@ -16,7 +16,9 @@ from typing import cast
 import yaml
 
 TRAINING_KEYS = frozenset({"validation_fraction", "models"})
-EXPERIMENT_KEYS = frozenset({"maximum_candidates", "primary_metric"})
+EXPERIMENT_KEYS = frozenset(
+    {"maximum_candidates", "minimum_successful_candidates", "primary_metric"}
+)
 MODEL_NAMES = frozenset({"logistic_regression", "random_forest"})
 LOGISTIC_REGRESSION_KEYS = frozenset({"C", "max_iter"})
 RANDOM_FOREST_KEYS = frozenset(
@@ -74,6 +76,7 @@ class TrainingSettings:
     random_seed: int
     validation_fraction: float
     maximum_candidates: int
+    minimum_successful_candidates: int
     primary_metric: str
     logistic_regression: LogisticRegressionSettings
     random_forest: RandomForestSettings
@@ -102,6 +105,16 @@ def load_training_settings(params_path: Path) -> TrainingSettings:
             f"({len(ModelName)} required)"
         )
         raise TrainingConfigurationError(message)
+    minimum_successful_candidates = _require_positive_integer(
+        experiments.get("minimum_successful_candidates"),
+        "experiments.minimum_successful_candidates",
+    )
+    if minimum_successful_candidates > maximum_candidates:
+        message = (
+            "experiments.minimum_successful_candidates cannot exceed "
+            "experiments.maximum_candidates"
+        )
+        raise TrainingConfigurationError(message)
 
     return TrainingSettings(
         random_seed=_require_non_negative_integer(
@@ -113,6 +126,7 @@ def load_training_settings(params_path: Path) -> TrainingSettings:
             "training.validation_fraction",
         ),
         maximum_candidates=maximum_candidates,
+        minimum_successful_candidates=minimum_successful_candidates,
         primary_metric=_require_supported_metric(
             experiments.get("primary_metric"),
             "experiments.primary_metric",

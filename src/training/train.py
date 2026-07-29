@@ -16,13 +16,22 @@ from pathlib import Path
 import pandas as pd
 from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
+from src.agent.plan_validator import (
+    ExperimentPlanValidationError,
+    load_and_validate_experiment_plan,
+)
+from src.agent.schemas import ExperimentPlan
 from src.data.schema import (
     CUSTOMER_CHURN_COLUMNS,
     CUSTOMER_IDENTIFIER_COLUMN,
     CUSTOMER_TARGET_COLUMN,
 )
 from src.training.artifacts import TrainingArtifactError, persist_training_run
-from src.training.catalog import CandidateEstimator, create_fallback_candidates
+from src.training.catalog import (
+    CandidateEstimator,
+    create_candidate,
+    create_fallback_candidates,
+)
 from src.training.evaluate import (
     CandidateEvaluation,
     CandidateMetrics,
@@ -43,6 +52,7 @@ DEFAULT_CURATED_PATH = Path("data/curated/training.csv")
 DEFAULT_PARAMS_PATH = Path("params.yaml")
 DEFAULT_MODEL_DIRECTORY = Path("artifacts/models")
 DEFAULT_METRICS_DIRECTORY = Path("artifacts/metrics")
+DEFAULT_PLAN_PATH = Path("artifacts/experiment-plans/fallback.json")
 
 
 class TrainingDataError(ValueError):
@@ -80,10 +90,27 @@ class TrainedCandidate:
 
 
 @dataclass(frozen=True, slots=True)
+class FailedCandidate:
+    """Safe failure summary for one candidate without traceback or data."""
+
+    model_name: ModelName
+    reason: str
+
+
+@dataclass(frozen=True, slots=True)
+class CandidateTrainingBatch:
+    """Independent successful and failed candidate outcomes."""
+
+    successful: tuple[TrainedCandidate, ...]
+    failed: tuple[FailedCandidate, ...]
+
+
+@dataclass(frozen=True, slots=True)
 class TrainingRun:
     """All successful candidates and the deterministically selected winner."""
 
     candidates: tuple[TrainedCandidate, ...]
+    failed_candidates: tuple[FailedCandidate, ...]
     selected: TrainedCandidate
 
 
@@ -110,32 +137,89 @@ def run_training(
     """Load curated data, train fallback candidates, and select the best one."""
 
     split = load_and_split_training_data(curated_path, settings)
-    trained_candidates = train_candidates(
+    batch = train_candidates(
         split,
         create_fallback_candidates(settings),
     )
-    selected_evaluation = select_best_candidate(
-        tuple(candidate.evaluation for candidate in trained_candidates),
+    return _select_training_run(
+        batch,
         settings.primary_metric,
+        settings.minimum_successful_candidates,
+    )
+
+
+def run_training_from_plan(
+    curated_path: Path,
+    settings: TrainingSettings,
+    approved_plan: ExperimentPlan,
+) -> TrainingRun:
+    """Train candidates constructed only from an approved experiment plan."""
+
+    candidates = tuple(
+        create_candidate(
+            experiment.algorithm,
+            settings,
+            experiment.parameters,
+        )
+        for experiment in approved_plan.experiments
+    )
+    split = load_and_split_training_data(curated_path, settings)
+    batch = train_candidates(split, candidates)
+    return _select_training_run(
+        batch,
+        approved_plan.primary_metric,
+        settings.minimum_successful_candidates,
+    )
+
+
+def _select_training_run(
+    batch: CandidateTrainingBatch,
+    primary_metric: str,
+    minimum_successful_candidates: int,
+) -> TrainingRun:
+    if len(batch.successful) < minimum_successful_candidates:
+        message = (
+            "Successful candidate count "
+            f"{len(batch.successful)} is below required minimum "
+            f"{minimum_successful_candidates}"
+        )
+        raise CandidateTrainingError(message)
+    selected_evaluation = select_best_candidate(
+        tuple(candidate.evaluation for candidate in batch.successful),
+        primary_metric,
     )
     selected = next(
         candidate
-        for candidate in trained_candidates
+        for candidate in batch.successful
         if candidate.model_name is selected_evaluation.model_name
     )
-    return TrainingRun(candidates=trained_candidates, selected=selected)
+    return TrainingRun(
+        candidates=batch.successful,
+        failed_candidates=batch.failed,
+        selected=selected,
+    )
 
 
 def train_candidates(
     split: TrainingDatasetSplit,
     candidates: tuple[CandidateEstimator, ...],
-) -> tuple[TrainedCandidate, ...]:
+) -> CandidateTrainingBatch:
     """Fit and evaluate every approved candidate independently."""
 
     if not candidates:
         raise CandidateTrainingError("At least one candidate is required for training")
 
-    return tuple(_train_candidate(split, candidate) for candidate in candidates)
+    successful: list[TrainedCandidate] = []
+    failed: list[FailedCandidate] = []
+    for candidate in candidates:
+        try:
+            successful.append(_train_candidate(split, candidate))
+        except CandidateTrainingError as error:
+            failed.append(FailedCandidate(model_name=candidate.name, reason=str(error)))
+    return CandidateTrainingBatch(
+        successful=tuple(successful),
+        failed=tuple(failed),
+    )
 
 
 def _train_candidate(
@@ -277,6 +361,12 @@ def parse_args(arguments: Sequence[str] | None = None) -> argparse.Namespace:
         help="Versioned training parameters (default: params.yaml).",
     )
     parser.add_argument(
+        "--plan",
+        type=Path,
+        default=DEFAULT_PLAN_PATH,
+        help="Approved experiment plan (default: fallback plan artifact).",
+    )
+    parser.add_argument(
         "--model-dir",
         type=Path,
         default=DEFAULT_MODEL_DIRECTORY,
@@ -298,7 +388,8 @@ def main(arguments: Sequence[str] | None = None) -> int:
     configure_logging()
     try:
         settings = load_training_settings(args.params)
-        training_run = run_training(args.input, settings)
+        approved_plan = load_and_validate_experiment_plan(args.plan, settings)
+        training_run = run_training_from_plan(args.input, settings, approved_plan)
         artifacts = persist_training_run(
             training_run,
             args.model_dir,
@@ -310,6 +401,7 @@ def main(arguments: Sequence[str] | None = None) -> int:
         TrainingDataError,
         CandidateTrainingError,
         TrainingArtifactError,
+        ExperimentPlanValidationError,
     ) as error:
         LOGGER.error("training_failed reason=%s", error)
         return 1
@@ -331,6 +423,12 @@ def main(arguments: Sequence[str] | None = None) -> int:
             metrics.confusion_matrix,
             metrics.class_distribution,
             candidate.training_seconds,
+        )
+    for failure in training_run.failed_candidates:
+        LOGGER.warning(
+            "candidate_failed model=%s reason=%s",
+            failure.model_name.value,
+            failure.reason,
         )
 
     LOGGER.info(

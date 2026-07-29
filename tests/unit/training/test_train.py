@@ -3,13 +3,19 @@ from pathlib import Path
 
 import pandas as pd
 import pytest
+import src.training.train as training_module
 from pandas.testing import assert_frame_equal, assert_series_equal
 from sklearn.pipeline import Pipeline
+from src.agent.planner import build_fallback_plan, write_experiment_plan
 from src.data.schema import CUSTOMER_CHURN_COLUMNS
+from src.training.catalog import CandidateEstimator
 from src.training.preprocessing import MODEL_FEATURE_COLUMNS
 from src.training.settings import TrainingSettings, load_training_settings
 from src.training.train import (
+    CandidateTrainingError,
+    TrainedCandidate,
     TrainingDataError,
+    TrainingDatasetSplit,
     load_and_split_training_data,
     main,
     run_training,
@@ -127,11 +133,61 @@ def test_run_training_fits_both_candidates_and_selects_one(
     )
 
 
+def test_training_continues_when_one_candidate_fails(
+    tmp_path: Path,
+    settings: TrainingSettings,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    curated_path = _write_curated_dataset(tmp_path)
+    original_train_candidate = training_module._train_candidate
+
+    def fail_logistic(
+        split: TrainingDatasetSplit,
+        candidate: CandidateEstimator,
+    ) -> TrainedCandidate:
+        if candidate.name.value == "logistic_regression":
+            raise CandidateTrainingError("simulated candidate failure")
+        return original_train_candidate(split, candidate)
+
+    monkeypatch.setattr(training_module, "_train_candidate", fail_logistic)
+
+    result = run_training(curated_path, settings)
+
+    assert tuple(item.model_name.value for item in result.candidates) == (
+        "random_forest",
+    )
+    assert result.failed_candidates[0].model_name.value == "logistic_regression"
+    assert result.selected.model_name.value == "random_forest"
+
+
+def test_training_stops_when_every_candidate_fails(
+    tmp_path: Path,
+    settings: TrainingSettings,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    curated_path = _write_curated_dataset(tmp_path)
+
+    def fail_candidate(
+        split: TrainingDatasetSplit,
+        candidate: CandidateEstimator,
+    ) -> TrainedCandidate:
+        raise CandidateTrainingError("simulated candidate failure")
+
+    monkeypatch.setattr(training_module, "_train_candidate", fail_candidate)
+
+    with pytest.raises(CandidateTrainingError, match="below required minimum"):
+        run_training(curated_path, settings)
+
+
 def test_training_cli_logs_candidates_and_selected_model(
     tmp_path: Path,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     curated_path = _write_curated_dataset(tmp_path)
+    plan_path = write_experiment_plan(
+        build_fallback_plan(load_training_settings(PARAMS_PATH)),
+        tmp_path / "fallback.json",
+    )
     caplog.set_level(logging.INFO, logger="src.training.train")
 
     exit_code = main(
@@ -140,6 +196,12 @@ def test_training_cli_logs_candidates_and_selected_model(
             str(curated_path),
             "--params",
             str(PARAMS_PATH),
+            "--plan",
+            str(plan_path),
+            "--model-dir",
+            str(tmp_path / "models"),
+            "--metrics-dir",
+            str(tmp_path / "metrics"),
         ]
     )
 

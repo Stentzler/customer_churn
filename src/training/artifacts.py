@@ -23,6 +23,7 @@ class TrainingArtifacts:
 
     model_paths: tuple[Path, ...]
     metric_paths: tuple[Path, ...]
+    failures_path: Path
     selection_path: Path
 
 
@@ -48,6 +49,19 @@ def persist_training_run(
             metric_paths.append(metric_path)
 
         selection_path = metrics_directory / "selection.json"
+        failures_path = metrics_directory / "failures.json"
+        _write_json(
+            {
+                "failures": [
+                    {
+                        "model_name": failure.model_name.value,
+                        "reason": failure.reason,
+                    }
+                    for failure in training_run.failed_candidates
+                ]
+            },
+            failures_path,
+        )
         _write_json(
             {
                 "primary_metric": primary_metric,
@@ -65,6 +79,7 @@ def persist_training_run(
     return TrainingArtifacts(
         model_paths=tuple(model_paths),
         metric_paths=tuple(metric_paths),
+        failures_path=failures_path,
         selection_path=selection_path,
     )
 
@@ -83,7 +98,6 @@ def _candidate_payload(candidate: TrainedCandidate) -> dict[str, object]:
         "precision": metrics.precision,
         "recall": metrics.recall,
         "roc_auc": metrics.roc_auc,
-        "training_seconds": candidate.training_seconds,
     }
 
 

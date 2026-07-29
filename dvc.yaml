@@ -121,10 +121,27 @@ stages:
     outs:
       - reports/data-profile/training.profile.json
 
+  fallback_plan:
+    cmd: uv run python -m src.agent.planner
+    deps:
+      - src/agent/planner.py
+      - src/agent/schemas.py
+      - src/training/catalog.py
+      - src/training/settings.py
+    params:
+      - project.random_seed
+      - experiments
+      - training
+    outs:
+      - artifacts/experiment-plans/fallback.json
+
   train:
     cmd: uv run python -m src.training.train
     deps:
+      - artifacts/experiment-plans/fallback.json
       - data/curated/training.csv
+      - src/agent/plan_validator.py
+      - src/agent/schemas.py
       - src/training/artifacts.py
       - src/training/catalog.py
       - src/training/evaluate.py
@@ -139,6 +156,7 @@ stages:
       - artifacts/models/logistic_regression.joblib
       - artifacts/models/random_forest.joblib
     metrics:
+      - artifacts/metrics/failures.json
       - artifacts/metrics/logistic_regression.json
       - artifacts/metrics/random_forest.json
       - artifacts/metrics/selection.json
