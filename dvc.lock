@@ -328,12 +328,12 @@ stages:
     outs:
     - path: reports/drift/normal.drift.html
       hash: md5
-      md5: 1af88773b6ced2911c6992d50aee7b7a
+      md5: 1bbbb9ccfdaca3dd8a9b5c2a50cb9be5
       size: 4041859
     - path: reports/drift/normal.drift.json
       hash: md5
-      md5: bd7fd2ffff2be11a23e328b2999c1b8a
-      size: 2256
+      md5: 5f2cd479cc5fda1cb32100432feb4e49
+      size: 2255
   drift_drifted:
     cmd: uv run python -m src.data.drift --current data/accepted/drifted.csv
     deps:
@@ -411,7 +411,7 @@ stages:
     outs:
     - path: reports/drift/drifted.drift.html
       hash: md5
-      md5: af47d9b91518ed0e8d4dd949831e2c92
+      md5: 1cb413babdee9d6fe35e4b542483251e
       size: 4040842
     - path: reports/drift/drifted.drift.json
       hash: md5
