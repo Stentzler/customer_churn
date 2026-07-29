@@ -152,6 +152,26 @@ def test_drifted_scenario_shifts_selected_features(
     assert drifted["usage_hours_monthly"].mean() < normal["usage_hours_monthly"].mean()
 
 
+def test_generated_target_has_an_understandable_learnable_signal(
+    data_contract_config: DataContractConfig,
+) -> None:
+    dataframe = generate_valid_customer_dataframe(
+        row_count=2000,
+        seed=42,
+        contract=data_contract_config,
+    )
+    low_risk = dataframe[
+        (dataframe["support_tickets_90d"] <= 2) & (dataframe["late_payments_12m"] <= 1)
+    ]
+    high_risk = dataframe[
+        (dataframe["support_tickets_90d"] >= 10) | (dataframe["late_payments_12m"] >= 7)
+    ]
+
+    assert len(low_risk) >= 50
+    assert len(high_risk) >= 50
+    assert high_risk["churned"].mean() > low_risk["churned"].mean() + 0.20
+
+
 def test_invalid_scenario_has_expected_contract_failures(
     data_contract_config: DataContractConfig,
 ) -> None:

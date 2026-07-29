@@ -1,14 +1,18 @@
+import logging
 from pathlib import Path
 
 import pandas as pd
 import pytest
 from pandas.testing import assert_frame_equal, assert_series_equal
+from sklearn.pipeline import Pipeline
 from src.data.schema import CUSTOMER_CHURN_COLUMNS
 from src.training.preprocessing import MODEL_FEATURE_COLUMNS
 from src.training.settings import TrainingSettings, load_training_settings
 from src.training.train import (
     TrainingDataError,
     load_and_split_training_data,
+    main,
+    run_training,
     split_training_data,
 )
 
@@ -99,6 +103,60 @@ def test_both_target_classes_are_required(settings: TrainingSettings) -> None:
 
     with pytest.raises(TrainingDataError, match="both binary classes"):
         split_training_data(dataframe, settings)
+
+
+def test_run_training_fits_both_candidates_and_selects_one(
+    tmp_path: Path,
+    settings: TrainingSettings,
+) -> None:
+    curated_path = _write_curated_dataset(tmp_path)
+
+    result = run_training(curated_path, settings)
+
+    assert tuple(candidate.model_name.value for candidate in result.candidates) == (
+        "logistic_regression",
+        "random_forest",
+    )
+    assert result.selected in result.candidates
+    assert all(
+        isinstance(candidate.pipeline, Pipeline) for candidate in result.candidates
+    )
+    assert all(
+        hasattr(candidate.pipeline.named_steps["preprocessing"], "transformers_")
+        for candidate in result.candidates
+    )
+
+
+def test_training_cli_logs_candidates_and_selected_model(
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    curated_path = _write_curated_dataset(tmp_path)
+    caplog.set_level(logging.INFO, logger="src.training.train")
+
+    exit_code = main(
+        [
+            "--input",
+            str(curated_path),
+            "--params",
+            str(PARAMS_PATH),
+        ]
+    )
+
+    assert exit_code == 0
+    assert (
+        sum("candidate_trained" in record.getMessage() for record in caplog.records)
+        == 2
+    )
+    assert any("candidate_selected" in record.getMessage() for record in caplog.records)
+
+
+def _write_curated_dataset(tmp_path: Path) -> Path:
+    curated_directory = tmp_path / "curated"
+    curated_directory.mkdir()
+    curated_path = curated_directory / "training.csv"
+    _training_dataframe().to_csv(curated_path, index=False)
+    return curated_path
 
 
 def _training_dataframe(row_count: int = 100) -> pd.DataFrame:

@@ -73,6 +73,8 @@ def generate_synthetic_dataset(
         contract=contract,
     )
     if scenario is DatasetScenario.DRIFTED:
+        # Keep labels unchanged so this remains the project's feature-only drift
+        # demonstration. Target drift is measured separately by the pipeline.
         return _apply_feature_drift(dataframe, contract)
     if scenario is DatasetScenario.INVALID:
         return _apply_contract_violations(dataframe, contract)
@@ -208,8 +210,9 @@ def generate_valid_customer_dataframe(
     """Generate valid customer records with a reproducible churn relationship.
 
     Feature values are sampled inside the configured contract. Churn is not purely
-    random: support activity and late payments increase risk, while usage and
-    tenure reduce it. This gives later training steps a small, understandable signal.
+    random: spend, support activity, and late payments increase risk, while usage
+    and tenure reduce it. The effects are strong enough for simple baseline models
+    to learn while probabilistic label sampling keeps the task realistic.
 
     Args:
         row_count: Number of customer rows to create.
@@ -340,6 +343,7 @@ def _generate_customer_record(
 
     churn_probability = _calculate_churn_probability(
         tenure_months=tenure_months,
+        monthly_spend=monthly_spend,
         support_tickets=support_tickets,
         late_payments=late_payments,
         usage_hours=usage_hours,
@@ -367,6 +371,7 @@ def _generate_customer_record(
 def _calculate_churn_probability(
     *,
     tenure_months: int,
+    monthly_spend: float,
     support_tickets: int,
     late_payments: int,
     usage_hours: float,
@@ -376,15 +381,16 @@ def _calculate_churn_probability(
     """Calculate bounded churn probability from understandable feature effects."""
 
     risk_score = (
-        -2.2
-        - 0.8 * _normalize(tenure_months, contract.numeric_ranges["tenure_months"])
-        + 1.6
+        -2.8
+        - 3.0 * _normalize(tenure_months, contract.numeric_ranges["tenure_months"])
+        + 1.8 * _normalize(monthly_spend, contract.numeric_ranges["monthly_spend"])
+        + 4.8
         * _normalize(
             support_tickets,
             contract.numeric_ranges["support_tickets_90d"],
         )
-        + 1.4 * _normalize(late_payments, contract.numeric_ranges["late_payments_12m"])
-        - 1.0 * _normalize(usage_hours, contract.numeric_ranges["usage_hours_monthly"])
+        + 4.2 * _normalize(late_payments, contract.numeric_ranges["late_payments_12m"])
+        - 3.6 * _normalize(usage_hours, contract.numeric_ranges["usage_hours_monthly"])
         + _plan_risk_adjustment(plan_type)
     )
     return 1.0 / (1.0 + math.exp(-risk_score))
@@ -394,9 +400,9 @@ def _plan_risk_adjustment(plan_type: str) -> float:
     """Represent a small synthetic relationship between plan and churn."""
 
     adjustments = {
-        "basic": 0.35,
+        "basic": 0.90,
         "standard": 0.0,
-        "premium": -0.25,
+        "premium": -0.75,
     }
     return adjustments.get(plan_type, 0.0)
 

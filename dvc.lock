@@ -5,8 +5,8 @@ stages:
     deps:
     - path: src/data/generate.py
       hash: md5
-      md5: 7fe6a195e35cde936049ade9e985384b
-      size: 15051
+      md5: 041ce2e88616a965541b52a8e608ac79
+      size: 15432
     - path: src/data/settings.py
       hash: md5
       md5: 8ee344b78eaadc9d61b9f131e93f2533
@@ -65,30 +65,30 @@ stages:
     outs:
     - path: data/incoming/drifted.csv
       hash: md5
-      md5: 8db1cdcca49a7fa10502ed859e6a6602
+      md5: 1adf3d600c7f08b56b000aff6a2c6279
       size: 11684
     - path: data/incoming/invalid.csv
       hash: md5
-      md5: 99e68b4df113eff4253e75abe4e12098
+      md5: 03becbfbe6fc8df82a6530de440358ba
       size: 11724
     - path: data/incoming/normal.csv
       hash: md5
-      md5: 203afa334e444c64bc5a8c6bddede05e
+      md5: 4e9f6a85e50ee7aa092097b522a9d0ef
       size: 11753
     - path: data/reference/reference.csv
       hash: md5
-      md5: ae5d6a6949aa87fd5e1c84365d60e46c
+      md5: 63fef53949e3c7e52c021e0417015fde
       size: 58260
     - path: data/test/fixed_test.csv
       hash: md5
-      md5: 53bb314a27f063104760ff771094e1aa
+      md5: aef5ae67e8c3b7f53d1250e5cf5228a4
       size: 17588
   validate_normal:
     cmd: uv run python -m src.data.ingest --input data/incoming/normal.csv
     deps:
     - path: data/incoming/normal.csv
       hash: md5
-      md5: 203afa334e444c64bc5a8c6bddede05e
+      md5: 4e9f6a85e50ee7aa092097b522a9d0ef
       size: 11753
     - path: src/data/ingest.py
       hash: md5
@@ -157,7 +157,7 @@ stages:
     outs:
     - path: data/accepted/normal.csv
       hash: md5
-      md5: 203afa334e444c64bc5a8c6bddede05e
+      md5: 4e9f6a85e50ee7aa092097b522a9d0ef
       size: 11753
     - path: reports/data-quality/normal.validation.json
       hash: md5
@@ -172,7 +172,7 @@ stages:
     deps:
     - path: data/incoming/drifted.csv
       hash: md5
-      md5: 8db1cdcca49a7fa10502ed859e6a6602
+      md5: 1adf3d600c7f08b56b000aff6a2c6279
       size: 11684
     - path: src/data/ingest.py
       hash: md5
@@ -241,7 +241,7 @@ stages:
     outs:
     - path: data/accepted/drifted.csv
       hash: md5
-      md5: 8db1cdcca49a7fa10502ed859e6a6602
+      md5: 1adf3d600c7f08b56b000aff6a2c6279
       size: 11684
     - path: reports/data-quality/drifted.validation.json
       hash: md5
@@ -256,11 +256,11 @@ stages:
     deps:
     - path: data/accepted/normal.csv
       hash: md5
-      md5: 203afa334e444c64bc5a8c6bddede05e
+      md5: 4e9f6a85e50ee7aa092097b522a9d0ef
       size: 11753
     - path: data/reference/reference.csv
       hash: md5
-      md5: ae5d6a6949aa87fd5e1c84365d60e46c
+      md5: 63fef53949e3c7e52c021e0417015fde
       size: 58260
     - path: src/data/drift.py
       hash: md5
@@ -328,22 +328,22 @@ stages:
     outs:
     - path: reports/drift/normal.drift.html
       hash: md5
-      md5: 1bbbb9ccfdaca3dd8a9b5c2a50cb9be5
-      size: 4041859
+      md5: 7d81816c00850e1c6cece7f1b64cc074
+      size: 4041861
     - path: reports/drift/normal.drift.json
       hash: md5
-      md5: 5f2cd479cc5fda1cb32100432feb4e49
-      size: 2255
+      md5: 96b317808d5261f757cb3d3d2c552ef0
+      size: 2253
   drift_drifted:
     cmd: uv run python -m src.data.drift --current data/accepted/drifted.csv
     deps:
     - path: data/accepted/drifted.csv
       hash: md5
-      md5: 8db1cdcca49a7fa10502ed859e6a6602
+      md5: 1adf3d600c7f08b56b000aff6a2c6279
       size: 11684
     - path: data/reference/reference.csv
       hash: md5
-      md5: ae5d6a6949aa87fd5e1c84365d60e46c
+      md5: 63fef53949e3c7e52c021e0417015fde
       size: 58260
     - path: src/data/drift.py
       hash: md5
@@ -411,26 +411,26 @@ stages:
     outs:
     - path: reports/drift/drifted.drift.html
       hash: md5
-      md5: 1cb413babdee9d6fe35e4b542483251e
-      size: 4040842
+      md5: bfddc70e96fb77f3a99a3d252934a982
+      size: 4040828
     - path: reports/drift/drifted.drift.json
       hash: md5
-      md5: 7d2af2c2a2dd94a22fe8142ef151ea17
-      size: 2314
+      md5: 5a0051fe104362f292f0a03cadf74316
+      size: 2315
   curate:
     cmd: uv run python -m src.data.curate
     deps:
     - path: data/accepted/drifted.csv
       hash: md5
-      md5: 8db1cdcca49a7fa10502ed859e6a6602
+      md5: 1adf3d600c7f08b56b000aff6a2c6279
       size: 11684
     - path: data/accepted/normal.csv
       hash: md5
-      md5: 203afa334e444c64bc5a8c6bddede05e
+      md5: 4e9f6a85e50ee7aa092097b522a9d0ef
       size: 11753
     - path: data/reference/reference.csv
       hash: md5
-      md5: ae5d6a6949aa87fd5e1c84365d60e46c
+      md5: 63fef53949e3c7e52c021e0417015fde
       size: 58260
     - path: src/data/curate.py
       hash: md5
@@ -495,14 +495,14 @@ stages:
     outs:
     - path: data/curated/training.csv
       hash: md5
-      md5: e0c82e04d8906815d46d09c106b8e4fa
+      md5: 151622acf53bb9804a37ce6a6d9abb8f
       size: 81443
   profile:
     cmd: uv run python -m src.data.profile
     deps:
     - path: data/curated/training.csv
       hash: md5
-      md5: e0c82e04d8906815d46d09c106b8e4fa
+      md5: 151622acf53bb9804a37ce6a6d9abb8f
       size: 81443
     - path: src/data/profile.py
       hash: md5
@@ -567,5 +567,73 @@ stages:
     outs:
     - path: reports/data-profile/training.profile.json
       hash: md5
-      md5: 29487909c40b280769abf3853f923bbe
+      md5: 031f4efa93d2909346cd59828deb8b2c
       size: 2379
+  train:
+    cmd: uv run python -m src.training.train
+    deps:
+    - path: data/curated/training.csv
+      hash: md5
+      md5: 151622acf53bb9804a37ce6a6d9abb8f
+      size: 81443
+    - path: src/training/artifacts.py
+      hash: md5
+      md5: d0026844f81325ecde96edda60ee023c
+      size: 3584
+    - path: src/training/catalog.py
+      hash: md5
+      md5: ba81bb102edcbd402ea7f3a7e0d5ab75
+      size: 2229
+    - path: src/training/evaluate.py
+      hash: md5
+      md5: e66513b50ef009522b86e5081c5cf43a
+      size: 3276
+    - path: src/training/preprocessing.py
+      hash: md5
+      md5: 04230b61fca62be4979ad1dc96efc534
+      size: 2195
+    - path: src/training/settings.py
+      hash: md5
+      md5: 29daf8d3eafaa5e83a12ac58955e47fc
+      size: 8471
+    - path: src/training/train.py
+      hash: md5
+      md5: 7989c06a4b708b6af1cea6b5130f62b2
+      size: 11633
+    params:
+      params.yaml:
+        experiments:
+          maximum_candidates: 3
+          primary_metric: roc_auc
+        project.random_seed: 42
+        training:
+          validation_fraction: 0.2
+          models:
+            logistic_regression:
+              C: 1.0
+              max_iter: 1000
+            random_forest:
+              n_estimators: 200
+              max_depth: 8
+              min_samples_leaf: 2
+    outs:
+    - path: artifacts/metrics/logistic_regression.json
+      hash: md5
+      md5: e7b14535c84247c579f4938b76edd200
+      size: 395
+    - path: artifacts/metrics/random_forest.json
+      hash: md5
+      md5: 1060236f075859e6e6d9137c088197eb
+      size: 389
+    - path: artifacts/metrics/selection.json
+      hash: md5
+      md5: 862231307195f8cf442c164913dc94a8
+      size: 117
+    - path: artifacts/models/logistic_regression.joblib
+      hash: md5
+      md5: eb4b1a244f98e448f0df5dba240b0254
+      size: 4058
+    - path: artifacts/models/random_forest.joblib
+      hash: md5
+      md5: 5f3f3d98d06068e04738fbdfb4c6633f
+      size: 3038523

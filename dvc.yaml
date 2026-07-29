@@ -120,3 +120,25 @@ stages:
       - data_contract
     outs:
       - reports/data-profile/training.profile.json
+
+  train:
+    cmd: uv run python -m src.training.train
+    deps:
+      - data/curated/training.csv
+      - src/training/artifacts.py
+      - src/training/catalog.py
+      - src/training/evaluate.py
+      - src/training/preprocessing.py
+      - src/training/settings.py
+      - src/training/train.py
+    params:
+      - project.random_seed
+      - experiments
+      - training
+    outs:
+      - artifacts/models/logistic_regression.joblib
+      - artifacts/models/random_forest.joblib
+    metrics:
+      - artifacts/metrics/logistic_regression.json
+      - artifacts/metrics/random_forest.json
+      - artifacts/metrics/selection.json

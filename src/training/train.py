@@ -1,28 +1,56 @@
 """Trusted dataset loading and leakage-safe train/validation splitting.
 
-Candidate fitting will be added separately. Keeping data preparation independent
-allows its safeguards to be tested before training, tracking, or registry concerns
-are introduced.
+The CLI runs the deterministic fallback candidates locally. MLflow tracking and
+registry operations are intentionally separate concerns added in the next phase.
 """
 
 from __future__ import annotations
 
+import argparse
+import logging
+import time
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
 import pandas as pd
 from sklearn.model_selection import train_test_split
+from sklearn.pipeline import Pipeline
 from src.data.schema import (
     CUSTOMER_CHURN_COLUMNS,
     CUSTOMER_IDENTIFIER_COLUMN,
     CUSTOMER_TARGET_COLUMN,
 )
-from src.training.preprocessing import MODEL_FEATURE_COLUMNS
-from src.training.settings import TrainingSettings
+from src.training.artifacts import TrainingArtifactError, persist_training_run
+from src.training.catalog import CandidateEstimator, create_fallback_candidates
+from src.training.evaluate import (
+    CandidateEvaluation,
+    CandidateMetrics,
+    calculate_candidate_metrics,
+    select_best_candidate,
+)
+from src.training.preprocessing import MODEL_FEATURE_COLUMNS, create_model_pipeline
+from src.training.settings import (
+    ModelName,
+    TrainingConfigurationError,
+    TrainingSettings,
+    load_training_settings,
+)
+
+LOGGER = logging.getLogger(__name__)
+LOG_FORMAT = "%(levelname)s %(name)s %(message)s"
+DEFAULT_CURATED_PATH = Path("data/curated/training.csv")
+DEFAULT_PARAMS_PATH = Path("params.yaml")
+DEFAULT_MODEL_DIRECTORY = Path("artifacts/models")
+DEFAULT_METRICS_DIRECTORY = Path("artifacts/metrics")
 
 
 class TrainingDataError(ValueError):
     """Raised when curated data cannot safely be used for candidate training."""
+
+
+class CandidateTrainingError(RuntimeError):
+    """Raised when a deterministic candidate cannot be fitted or evaluated."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -33,6 +61,30 @@ class TrainingDatasetSplit:
     validation_features: pd.DataFrame
     training_target: pd.Series
     validation_target: pd.Series
+
+
+@dataclass(frozen=True, slots=True)
+class TrainedCandidate:
+    """A fitted serving pipeline and its verified validation result."""
+
+    model_name: ModelName
+    pipeline: Pipeline
+    metrics: CandidateMetrics
+    training_seconds: float
+
+    @property
+    def evaluation(self) -> CandidateEvaluation:
+        """Expose only the immutable information needed for model selection."""
+
+        return CandidateEvaluation(model_name=self.model_name, metrics=self.metrics)
+
+
+@dataclass(frozen=True, slots=True)
+class TrainingRun:
+    """All successful candidates and the deterministically selected winner."""
+
+    candidates: tuple[TrainedCandidate, ...]
+    selected: TrainedCandidate
 
 
 def load_and_split_training_data(
@@ -49,6 +101,77 @@ def load_and_split_training_data(
         raise TrainingDataError(message)
     dataframe = _read_curated_csv(curated_path)
     return split_training_data(dataframe, settings)
+
+
+def run_training(
+    curated_path: Path,
+    settings: TrainingSettings,
+) -> TrainingRun:
+    """Load curated data, train fallback candidates, and select the best one."""
+
+    split = load_and_split_training_data(curated_path, settings)
+    trained_candidates = train_candidates(
+        split,
+        create_fallback_candidates(settings),
+    )
+    selected_evaluation = select_best_candidate(
+        tuple(candidate.evaluation for candidate in trained_candidates),
+        settings.primary_metric,
+    )
+    selected = next(
+        candidate
+        for candidate in trained_candidates
+        if candidate.model_name is selected_evaluation.model_name
+    )
+    return TrainingRun(candidates=trained_candidates, selected=selected)
+
+
+def train_candidates(
+    split: TrainingDatasetSplit,
+    candidates: tuple[CandidateEstimator, ...],
+) -> tuple[TrainedCandidate, ...]:
+    """Fit and evaluate every approved candidate independently."""
+
+    if not candidates:
+        raise CandidateTrainingError("At least one candidate is required for training")
+
+    return tuple(_train_candidate(split, candidate) for candidate in candidates)
+
+
+def _train_candidate(
+    split: TrainingDatasetSplit,
+    candidate: CandidateEstimator,
+) -> TrainedCandidate:
+    pipeline = create_model_pipeline(candidate)
+    started_at = time.perf_counter()
+    try:
+        # Fitting the complete pipeline on this partition is the central leakage
+        # safeguard: scalers and encoders never observe validation values.
+        pipeline.fit(split.training_features, split.training_target)
+        training_seconds = time.perf_counter() - started_at
+        predicted = pd.Series(
+            pipeline.predict(split.validation_features),
+            index=split.validation_target.index,
+        )
+        positive_probability = pd.Series(
+            pipeline.predict_proba(split.validation_features)[:, 1],
+            index=split.validation_target.index,
+        )
+        metrics = calculate_candidate_metrics(
+            split.validation_target,
+            predicted,
+            positive_probability,
+        )
+    except Exception as error:
+        message = f"Candidate '{candidate.name.value}' failed during training"
+        raise CandidateTrainingError(message) from error
+
+    return TrainedCandidate(
+        model_name=candidate.name,
+        pipeline=pipeline,
+        metrics=metrics,
+        training_seconds=training_seconds,
+    )
 
 
 def split_training_data(
@@ -127,3 +250,98 @@ def _validate_training_dataframe(dataframe: pd.DataFrame) -> None:
     # This assertion documents the safety rule even if the data schema changes.
     if CUSTOMER_IDENTIFIER_COLUMN in MODEL_FEATURE_COLUMNS:
         raise RuntimeError("Customer identifiers cannot be model features")
+
+
+def configure_logging() -> None:
+    """Configure concise default logging for direct CLI execution."""
+
+    logging.basicConfig(level=logging.INFO, format=LOG_FORMAT)
+
+
+def parse_args(arguments: Sequence[str] | None = None) -> argparse.Namespace:
+    """Parse local deterministic-training command arguments."""
+
+    parser = argparse.ArgumentParser(
+        description="Train and compare deterministic customer-churn baselines."
+    )
+    parser.add_argument(
+        "--input",
+        type=Path,
+        default=DEFAULT_CURATED_PATH,
+        help="Curated labeled CSV (default: data/curated/training.csv).",
+    )
+    parser.add_argument(
+        "--params",
+        type=Path,
+        default=DEFAULT_PARAMS_PATH,
+        help="Versioned training parameters (default: params.yaml).",
+    )
+    parser.add_argument(
+        "--model-dir",
+        type=Path,
+        default=DEFAULT_MODEL_DIRECTORY,
+        help="Candidate pipeline directory (default: artifacts/models).",
+    )
+    parser.add_argument(
+        "--metrics-dir",
+        type=Path,
+        default=DEFAULT_METRICS_DIRECTORY,
+        help="Candidate metrics directory (default: artifacts/metrics).",
+    )
+    return parser.parse_args(arguments)
+
+
+def main(arguments: Sequence[str] | None = None) -> int:
+    """Run local baseline training and report verified candidate metrics."""
+
+    args = parse_args(arguments)
+    configure_logging()
+    try:
+        settings = load_training_settings(args.params)
+        training_run = run_training(args.input, settings)
+        artifacts = persist_training_run(
+            training_run,
+            args.model_dir,
+            args.metrics_dir,
+            settings.primary_metric,
+        )
+    except (
+        TrainingConfigurationError,
+        TrainingDataError,
+        CandidateTrainingError,
+        TrainingArtifactError,
+    ) as error:
+        LOGGER.error("training_failed reason=%s", error)
+        return 1
+
+    for candidate in training_run.candidates:
+        metrics = candidate.metrics
+        LOGGER.info(
+            (
+                "candidate_trained model=%s roc_auc=%.6f pr_auc=%.6f f1=%.6f "
+                "precision=%.6f recall=%.6f confusion_matrix=%s "
+                "class_distribution=%s training_seconds=%.6f"
+            ),
+            candidate.model_name.value,
+            metrics.roc_auc,
+            metrics.pr_auc,
+            metrics.f1,
+            metrics.precision,
+            metrics.recall,
+            metrics.confusion_matrix,
+            metrics.class_distribution,
+            candidate.training_seconds,
+        )
+
+    LOGGER.info(
+        "candidate_selected model=%s primary_metric=%s value=%.6f manifest=%s",
+        training_run.selected.model_name.value,
+        settings.primary_metric,
+        training_run.selected.metrics.value_for(settings.primary_metric),
+        artifacts.selection_path,
+    )
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
