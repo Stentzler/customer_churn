@@ -1,4 +1,4 @@
-.PHONY: install lint test
+.PHONY: install lint test generate-data process-batch curate-data
 
 install:
 	uv sync --locked
@@ -9,3 +9,12 @@ lint:
 
 test:
 	uv run pytest
+
+generate-data:
+	uv run python -m src.data.generate --scenario all
+
+process-batch:
+	uv run python -m src.data.ingest --input "$(INPUT)"
+
+curate-data:
+	uv run python -m src.data.curate

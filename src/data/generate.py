@@ -7,16 +7,26 @@ without changing random state used by other parts of the application.
 
 from __future__ import annotations
 
+import argparse
+import logging
 import math
 import random
+from collections.abc import Sequence
 from enum import StrEnum
+from pathlib import Path
 
 import pandas as pd
 from src.data.settings import (
     DataContractConfig,
+    DataContractConfigurationError,
     DataGenerationConfig,
     NumericRange,
+    load_data_contract,
+    load_data_generation,
 )
+
+LOGGER = logging.getLogger(__name__)
+LOG_FORMAT = "%(levelname)s %(name)s %(message)s"
 
 
 class DatasetScenario(StrEnum):
@@ -27,6 +37,10 @@ class DatasetScenario(StrEnum):
     NORMAL = "normal"
     DRIFTED = "drifted"
     INVALID = "invalid"
+
+
+class DataGenerationOperationalError(RuntimeError):
+    """Raised when generated data cannot be persisted to its destination."""
 
 
 def generate_synthetic_dataset(
@@ -63,6 +77,127 @@ def generate_synthetic_dataset(
     if scenario is DatasetScenario.INVALID:
         return _apply_contract_violations(dataframe, contract)
     return dataframe
+
+
+def generated_dataset_path(
+    scenario: DatasetScenario,
+    data_root: Path,
+) -> Path:
+    """Return the stable output path assigned to a synthetic scenario."""
+
+    if scenario is DatasetScenario.REFERENCE:
+        return data_root / "reference" / "reference.csv"
+    if scenario is DatasetScenario.FIXED_TEST:
+        return data_root / "test" / "fixed_test.csv"
+    return data_root / "incoming" / f"{scenario.value}.csv"
+
+
+def write_synthetic_dataset(
+    scenario: DatasetScenario,
+    generation: DataGenerationConfig,
+    contract: DataContractConfig,
+    data_root: Path,
+) -> Path:
+    """Generate one scenario and atomically persist it as deterministic CSV."""
+
+    dataframe = generate_synthetic_dataset(scenario, generation, contract)
+    output_path = generated_dataset_path(scenario, data_root)
+    temporary_path = output_path.with_suffix(".csv.tmp")
+
+    try:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        dataframe.to_csv(
+            temporary_path,
+            index=False,
+            lineterminator="\n",
+            float_format="%.2f",
+        )
+        temporary_path.replace(output_path)
+    except OSError as error:
+        temporary_path.unlink(missing_ok=True)
+        message = f"Cannot write generated dataset to '{output_path}': {error}"
+        raise DataGenerationOperationalError(message) from error
+
+    return output_path
+
+
+def write_all_synthetic_datasets(
+    generation: DataGenerationConfig,
+    contract: DataContractConfig,
+    data_root: Path,
+) -> tuple[Path, ...]:
+    """Persist every scenario in stable enum order."""
+
+    return tuple(
+        write_synthetic_dataset(scenario, generation, contract, data_root)
+        for scenario in DatasetScenario
+    )
+
+
+def main(arguments: Sequence[str] | None = None) -> int:
+    """Run synthetic data generation from the command line."""
+
+    parsed_arguments = _build_argument_parser().parse_args(arguments)
+    try:
+        generation = load_data_generation(parsed_arguments.params)
+        contract = load_data_contract(parsed_arguments.params)
+        scenarios = (
+            tuple(DatasetScenario)
+            if parsed_arguments.scenario == "all"
+            else (DatasetScenario(parsed_arguments.scenario),)
+        )
+        for scenario in scenarios:
+            output_path = write_synthetic_dataset(
+                scenario,
+                generation,
+                contract,
+                parsed_arguments.data_root,
+            )
+            LOGGER.info(
+                "dataset_generated scenario=%s rows=%d path=%s",
+                scenario.value,
+                _row_count_for(scenario, generation),
+                output_path,
+            )
+    except (
+        DataContractConfigurationError,
+        DataGenerationOperationalError,
+        ValueError,
+    ) as error:
+        LOGGER.error("generation_operational_error reason=%s", error)
+        return 2
+    return 0
+
+
+def configure_logging() -> None:
+    """Configure concise default logging for direct CLI execution."""
+
+    logging.basicConfig(level=logging.INFO, format=LOG_FORMAT)
+
+
+def _build_argument_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        description="Generate deterministic customer-churn datasets.",
+    )
+    parser.add_argument(
+        "--scenario",
+        choices=[scenario.value for scenario in DatasetScenario] + ["all"],
+        default="all",
+        help="Dataset scenario to generate (default: all).",
+    )
+    parser.add_argument(
+        "--params",
+        type=Path,
+        default=Path("params.yaml"),
+        help="Versioned YAML parameters file (default: params.yaml).",
+    )
+    parser.add_argument(
+        "--data-root",
+        type=Path,
+        default=Path("data"),
+        help="Root output directory (default: data).",
+    )
+    return parser
 
 
 def generate_valid_customer_dataframe(
@@ -329,3 +464,8 @@ def _build_typed_dataframe(records: list[dict[str, object]]) -> pd.DataFrame:
             "churned": "int64",
         }
     )
+
+
+if __name__ == "__main__":
+    configure_logging()
+    raise SystemExit(main())

@@ -4,8 +4,8 @@ A learning project for an automated and auditable customer-churn lifecycle spann
 DataOps, MLOps, and constrained LLMOps.
 
 The project is being implemented incrementally according to [SPEC.md](./SPEC.md).
-The repository currently contains the Phase 1 foundation; data generation, training,
-orchestration, serving, and publication behavior belong to later phases.
+The current implementation includes the repository foundation, deterministic
+synthetic-data scenarios, and data-contract validation.
 
 ## Development
 
@@ -22,7 +22,38 @@ make lint
 make test
 ```
 
+Generate all synthetic DataOps scenarios:
+
+```bash
+make generate-data
+```
+
+This writes the reference dataset to `data/reference/`, the immutable evaluation
+dataset to `data/test/`, and normal, drifted, and invalid deliveries to
+`data/incoming/`. These generated CSV files are ignored by Git and will be versioned
+with DVC in the data-pipeline phase.
+
+Validate and route one generated delivery:
+
+```bash
+make process-batch INPUT=data/incoming/normal.csv
+```
+
+Accepted batches are copied to `data/accepted/`. Contract-breaking batches are
+copied to `data/rejected/` and return exit code `1`, preventing later pipeline stages
+from treating rejection as success. Both paths produce JSON and Markdown reports
+under `reports/data-quality/`.
+
+Build the training dataset from the reference dataset and all accepted batches:
+
+```bash
+make curate-data
+```
+
+Curation reads only `data/reference/reference.csv` and sorted CSV files directly
+under `data/accepted/`. Duplicate customer identifiers keep the row from the last
+accepted filename, and the fixed test dataset is excluded by the curation interface.
+
 Configuration that is safe to version belongs in `params.yaml`. Copy variable names
 from `.env.example` into a local `.env` file when integrations are introduced. Never
 commit credentials.
-
