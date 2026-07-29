@@ -82,6 +82,7 @@ promotion:
   minimum_roc_auc_improvement: 0.005
 
 registry:
+  experiment_name: customer-churn-training
   model_name: customer-churn
 
 api:

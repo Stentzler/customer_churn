@@ -7,9 +7,11 @@ requires-python = ">=3.12,<3.13"
 dependencies = [
     "evidently>=0.7,<0.8",
     "joblib>=1.4,<2",
+    "mlflow>=3.5,<4",
     "pandas>=2.2,<3",
     "pandera[pandas]>=0.24,<1",
     "pydantic>=2.11,<3",
+    "python-dotenv>=1.0,<2",
     "pyyaml>=6,<7",
     "scikit-learn>=1.6,<2",
 ]

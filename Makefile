@@ -1,4 +1,4 @@
-.PHONY: install lint test generate-data process-batch curate-data profile-data drift-data data-pipeline train-models
+.PHONY: install lint test generate-data process-batch curate-data profile-data drift-data data-pipeline train-models track-models
 
 install:
 	uv sync --locked
@@ -30,3 +30,6 @@ data-pipeline:
 
 train-models:
 	uv run python -m src.training.train
+
+track-models:
+	uv run python -m src.training.registry
