@@ -1,0 +1,571 @@
+schema: '2.0'
+stages:
+  generate:
+    cmd: uv run python -m src.data.generate --scenario all
+    deps:
+    - path: src/data/generate.py
+      hash: md5
+      md5: 7fe6a195e35cde936049ade9e985384b
+      size: 15051
+    - path: src/data/settings.py
+      hash: md5
+      md5: 8ee344b78eaadc9d61b9f131e93f2533
+      size: 13734
+    params:
+      params.yaml:
+        data_contract:
+          schema_version: '1.0'
+          strict: true
+          ordered: true
+          minimum_batch_size: 50
+          maximum_failure_examples: 10
+          numeric_ranges:
+            age:
+              minimum: 18
+              maximum: 100
+            tenure_months:
+              minimum: 0
+              maximum: 120
+            monthly_spend:
+              minimum: 0.0
+              maximum: 500.0
+            support_tickets_90d:
+              minimum: 0
+              maximum: 20
+            late_payments_12m:
+              minimum: 0
+              maximum: 12
+            usage_hours_monthly:
+              minimum: 0.0
+              maximum: 300.0
+          allowed_categories:
+            plan_type:
+            - basic
+            - standard
+            - premium
+            region:
+            - north
+            - south
+            - east
+            - west
+          target_values:
+          - 0
+          - 1
+        data_generation:
+          reference_rows: 1000
+          fixed_test_rows: 300
+          batch_rows: 200
+          seed_offsets:
+            reference: 0
+            fixed_test: 1
+            normal: 2
+            drifted: 3
+            invalid: 4
+        project.random_seed: 42
+    outs:
+    - path: data/incoming/drifted.csv
+      hash: md5
+      md5: 8db1cdcca49a7fa10502ed859e6a6602
+      size: 11684
+    - path: data/incoming/invalid.csv
+      hash: md5
+      md5: 99e68b4df113eff4253e75abe4e12098
+      size: 11724
+    - path: data/incoming/normal.csv
+      hash: md5
+      md5: 203afa334e444c64bc5a8c6bddede05e
+      size: 11753
+    - path: data/reference/reference.csv
+      hash: md5
+      md5: ae5d6a6949aa87fd5e1c84365d60e46c
+      size: 58260
+    - path: data/test/fixed_test.csv
+      hash: md5
+      md5: 53bb314a27f063104760ff771094e1aa
+      size: 17588
+  validate_normal:
+    cmd: uv run python -m src.data.ingest --input data/incoming/normal.csv
+    deps:
+    - path: data/incoming/normal.csv
+      hash: md5
+      md5: 203afa334e444c64bc5a8c6bddede05e
+      size: 11753
+    - path: src/data/ingest.py
+      hash: md5
+      md5: 72eedcd992e15ccf0d856758abc0236c
+      size: 6184
+    - path: src/data/schema.py
+      hash: md5
+      md5: a328e73b303d5e0a0d53bb34d32cd3af
+      size: 5735
+    - path: src/data/settings.py
+      hash: md5
+      md5: 8ee344b78eaadc9d61b9f131e93f2533
+      size: 13734
+    - path: src/data/validate.py
+      hash: md5
+      md5: 6993e41cc630afcabd2d43bf06fa1463
+      size: 12658
+    - path: src/data/validation_models.py
+      hash: md5
+      md5: d6307e416c7c53b315b8d20b444b69ca
+      size: 5787
+    - path: src/data/validation_report.py
+      hash: md5
+      md5: a7c36308b3d6ea74c42f57bccd472d34
+      size: 5391
+    params:
+      params.yaml:
+        data_contract:
+          schema_version: '1.0'
+          strict: true
+          ordered: true
+          minimum_batch_size: 50
+          maximum_failure_examples: 10
+          numeric_ranges:
+            age:
+              minimum: 18
+              maximum: 100
+            tenure_months:
+              minimum: 0
+              maximum: 120
+            monthly_spend:
+              minimum: 0.0
+              maximum: 500.0
+            support_tickets_90d:
+              minimum: 0
+              maximum: 20
+            late_payments_12m:
+              minimum: 0
+              maximum: 12
+            usage_hours_monthly:
+              minimum: 0.0
+              maximum: 300.0
+          allowed_categories:
+            plan_type:
+            - basic
+            - standard
+            - premium
+            region:
+            - north
+            - south
+            - east
+            - west
+          target_values:
+          - 0
+          - 1
+    outs:
+    - path: data/accepted/normal.csv
+      hash: md5
+      md5: 203afa334e444c64bc5a8c6bddede05e
+      size: 11753
+    - path: reports/data-quality/normal.validation.json
+      hash: md5
+      md5: e55f30bc780944e9a28bca3dcfbeb9b6
+      size: 184
+    - path: reports/data-quality/normal.validation.md
+      hash: md5
+      md5: 180dfdce57a0e7dcc399124743f3aabf
+      size: 225
+  validate_drifted:
+    cmd: uv run python -m src.data.ingest --input data/incoming/drifted.csv
+    deps:
+    - path: data/incoming/drifted.csv
+      hash: md5
+      md5: 8db1cdcca49a7fa10502ed859e6a6602
+      size: 11684
+    - path: src/data/ingest.py
+      hash: md5
+      md5: 72eedcd992e15ccf0d856758abc0236c
+      size: 6184
+    - path: src/data/schema.py
+      hash: md5
+      md5: a328e73b303d5e0a0d53bb34d32cd3af
+      size: 5735
+    - path: src/data/settings.py
+      hash: md5
+      md5: 8ee344b78eaadc9d61b9f131e93f2533
+      size: 13734
+    - path: src/data/validate.py
+      hash: md5
+      md5: 6993e41cc630afcabd2d43bf06fa1463
+      size: 12658
+    - path: src/data/validation_models.py
+      hash: md5
+      md5: d6307e416c7c53b315b8d20b444b69ca
+      size: 5787
+    - path: src/data/validation_report.py
+      hash: md5
+      md5: a7c36308b3d6ea74c42f57bccd472d34
+      size: 5391
+    params:
+      params.yaml:
+        data_contract:
+          schema_version: '1.0'
+          strict: true
+          ordered: true
+          minimum_batch_size: 50
+          maximum_failure_examples: 10
+          numeric_ranges:
+            age:
+              minimum: 18
+              maximum: 100
+            tenure_months:
+              minimum: 0
+              maximum: 120
+            monthly_spend:
+              minimum: 0.0
+              maximum: 500.0
+            support_tickets_90d:
+              minimum: 0
+              maximum: 20
+            late_payments_12m:
+              minimum: 0
+              maximum: 12
+            usage_hours_monthly:
+              minimum: 0.0
+              maximum: 300.0
+          allowed_categories:
+            plan_type:
+            - basic
+            - standard
+            - premium
+            region:
+            - north
+            - south
+            - east
+            - west
+          target_values:
+          - 0
+          - 1
+    outs:
+    - path: data/accepted/drifted.csv
+      hash: md5
+      md5: 8db1cdcca49a7fa10502ed859e6a6602
+      size: 11684
+    - path: reports/data-quality/drifted.validation.json
+      hash: md5
+      md5: c46d8243ab21c436f19770370a60f599
+      size: 185
+    - path: reports/data-quality/drifted.validation.md
+      hash: md5
+      md5: 6f152fa6ea39682307ec3c54542787b5
+      size: 226
+  drift_normal:
+    cmd: uv run python -m src.data.drift --current data/accepted/normal.csv
+    deps:
+    - path: data/accepted/normal.csv
+      hash: md5
+      md5: 203afa334e444c64bc5a8c6bddede05e
+      size: 11753
+    - path: data/reference/reference.csv
+      hash: md5
+      md5: ae5d6a6949aa87fd5e1c84365d60e46c
+      size: 58260
+    - path: src/data/drift.py
+      hash: md5
+      md5: 81eda0254cf384b40f174011a732f9b0
+      size: 15867
+    - path: src/data/schema.py
+      hash: md5
+      md5: a328e73b303d5e0a0d53bb34d32cd3af
+      size: 5735
+    - path: src/data/settings.py
+      hash: md5
+      md5: 8ee344b78eaadc9d61b9f131e93f2533
+      size: 13734
+    - path: src/data/validate.py
+      hash: md5
+      md5: 6993e41cc630afcabd2d43bf06fa1463
+      size: 12658
+    - path: src/data/validation_models.py
+      hash: md5
+      md5: d6307e416c7c53b315b8d20b444b69ca
+      size: 5787
+    params:
+      params.yaml:
+        data_contract:
+          schema_version: '1.0'
+          strict: true
+          ordered: true
+          minimum_batch_size: 50
+          maximum_failure_examples: 10
+          numeric_ranges:
+            age:
+              minimum: 18
+              maximum: 100
+            tenure_months:
+              minimum: 0
+              maximum: 120
+            monthly_spend:
+              minimum: 0.0
+              maximum: 500.0
+            support_tickets_90d:
+              minimum: 0
+              maximum: 20
+            late_payments_12m:
+              minimum: 0
+              maximum: 12
+            usage_hours_monthly:
+              minimum: 0.0
+              maximum: 300.0
+          allowed_categories:
+            plan_type:
+            - basic
+            - standard
+            - premium
+            region:
+            - north
+            - south
+            - east
+            - west
+          target_values:
+          - 0
+          - 1
+        drift:
+          reference_path: data/reference/reference.csv
+          feature_drift_share_threshold: 0.25
+    outs:
+    - path: reports/drift/normal.drift.html
+      hash: md5
+      md5: 1af88773b6ced2911c6992d50aee7b7a
+      size: 4041859
+    - path: reports/drift/normal.drift.json
+      hash: md5
+      md5: bd7fd2ffff2be11a23e328b2999c1b8a
+      size: 2256
+  drift_drifted:
+    cmd: uv run python -m src.data.drift --current data/accepted/drifted.csv
+    deps:
+    - path: data/accepted/drifted.csv
+      hash: md5
+      md5: 8db1cdcca49a7fa10502ed859e6a6602
+      size: 11684
+    - path: data/reference/reference.csv
+      hash: md5
+      md5: ae5d6a6949aa87fd5e1c84365d60e46c
+      size: 58260
+    - path: src/data/drift.py
+      hash: md5
+      md5: 81eda0254cf384b40f174011a732f9b0
+      size: 15867
+    - path: src/data/schema.py
+      hash: md5
+      md5: a328e73b303d5e0a0d53bb34d32cd3af
+      size: 5735
+    - path: src/data/settings.py
+      hash: md5
+      md5: 8ee344b78eaadc9d61b9f131e93f2533
+      size: 13734
+    - path: src/data/validate.py
+      hash: md5
+      md5: 6993e41cc630afcabd2d43bf06fa1463
+      size: 12658
+    - path: src/data/validation_models.py
+      hash: md5
+      md5: d6307e416c7c53b315b8d20b444b69ca
+      size: 5787
+    params:
+      params.yaml:
+        data_contract:
+          schema_version: '1.0'
+          strict: true
+          ordered: true
+          minimum_batch_size: 50
+          maximum_failure_examples: 10
+          numeric_ranges:
+            age:
+              minimum: 18
+              maximum: 100
+            tenure_months:
+              minimum: 0
+              maximum: 120
+            monthly_spend:
+              minimum: 0.0
+              maximum: 500.0
+            support_tickets_90d:
+              minimum: 0
+              maximum: 20
+            late_payments_12m:
+              minimum: 0
+              maximum: 12
+            usage_hours_monthly:
+              minimum: 0.0
+              maximum: 300.0
+          allowed_categories:
+            plan_type:
+            - basic
+            - standard
+            - premium
+            region:
+            - north
+            - south
+            - east
+            - west
+          target_values:
+          - 0
+          - 1
+        drift:
+          reference_path: data/reference/reference.csv
+          feature_drift_share_threshold: 0.25
+    outs:
+    - path: reports/drift/drifted.drift.html
+      hash: md5
+      md5: af47d9b91518ed0e8d4dd949831e2c92
+      size: 4040842
+    - path: reports/drift/drifted.drift.json
+      hash: md5
+      md5: 7d2af2c2a2dd94a22fe8142ef151ea17
+      size: 2314
+  curate:
+    cmd: uv run python -m src.data.curate
+    deps:
+    - path: data/accepted/drifted.csv
+      hash: md5
+      md5: 8db1cdcca49a7fa10502ed859e6a6602
+      size: 11684
+    - path: data/accepted/normal.csv
+      hash: md5
+      md5: 203afa334e444c64bc5a8c6bddede05e
+      size: 11753
+    - path: data/reference/reference.csv
+      hash: md5
+      md5: ae5d6a6949aa87fd5e1c84365d60e46c
+      size: 58260
+    - path: src/data/curate.py
+      hash: md5
+      md5: a3a74396a1dea4c0bded40ff8cf74cdc
+      size: 6609
+    - path: src/data/schema.py
+      hash: md5
+      md5: a328e73b303d5e0a0d53bb34d32cd3af
+      size: 5735
+    - path: src/data/settings.py
+      hash: md5
+      md5: 8ee344b78eaadc9d61b9f131e93f2533
+      size: 13734
+    - path: src/data/validate.py
+      hash: md5
+      md5: 6993e41cc630afcabd2d43bf06fa1463
+      size: 12658
+    - path: src/data/validation_models.py
+      hash: md5
+      md5: d6307e416c7c53b315b8d20b444b69ca
+      size: 5787
+    params:
+      params.yaml:
+        data_contract:
+          schema_version: '1.0'
+          strict: true
+          ordered: true
+          minimum_batch_size: 50
+          maximum_failure_examples: 10
+          numeric_ranges:
+            age:
+              minimum: 18
+              maximum: 100
+            tenure_months:
+              minimum: 0
+              maximum: 120
+            monthly_spend:
+              minimum: 0.0
+              maximum: 500.0
+            support_tickets_90d:
+              minimum: 0
+              maximum: 20
+            late_payments_12m:
+              minimum: 0
+              maximum: 12
+            usage_hours_monthly:
+              minimum: 0.0
+              maximum: 300.0
+          allowed_categories:
+            plan_type:
+            - basic
+            - standard
+            - premium
+            region:
+            - north
+            - south
+            - east
+            - west
+          target_values:
+          - 0
+          - 1
+    outs:
+    - path: data/curated/training.csv
+      hash: md5
+      md5: e0c82e04d8906815d46d09c106b8e4fa
+      size: 81443
+  profile:
+    cmd: uv run python -m src.data.profile
+    deps:
+    - path: data/curated/training.csv
+      hash: md5
+      md5: e0c82e04d8906815d46d09c106b8e4fa
+      size: 81443
+    - path: src/data/profile.py
+      hash: md5
+      md5: 16025b441ea7dfb7a26ec4f5bb60f9e8
+      size: 9688
+    - path: src/data/schema.py
+      hash: md5
+      md5: a328e73b303d5e0a0d53bb34d32cd3af
+      size: 5735
+    - path: src/data/settings.py
+      hash: md5
+      md5: 8ee344b78eaadc9d61b9f131e93f2533
+      size: 13734
+    - path: src/data/validate.py
+      hash: md5
+      md5: 6993e41cc630afcabd2d43bf06fa1463
+      size: 12658
+    - path: src/data/validation_models.py
+      hash: md5
+      md5: d6307e416c7c53b315b8d20b444b69ca
+      size: 5787
+    params:
+      params.yaml:
+        data_contract:
+          schema_version: '1.0'
+          strict: true
+          ordered: true
+          minimum_batch_size: 50
+          maximum_failure_examples: 10
+          numeric_ranges:
+            age:
+              minimum: 18
+              maximum: 100
+            tenure_months:
+              minimum: 0
+              maximum: 120
+            monthly_spend:
+              minimum: 0.0
+              maximum: 500.0
+            support_tickets_90d:
+              minimum: 0
+              maximum: 20
+            late_payments_12m:
+              minimum: 0
+              maximum: 12
+            usage_hours_monthly:
+              minimum: 0.0
+              maximum: 300.0
+          allowed_categories:
+            plan_type:
+            - basic
+            - standard
+            - premium
+            region:
+            - north
+            - south
+            - east
+            - west
+          target_values:
+          - 0
+          - 1
+    outs:
+    - path: reports/data-profile/training.profile.json
+      hash: md5
+      md5: 29487909c40b280769abf3853f923bbe
+      size: 2379

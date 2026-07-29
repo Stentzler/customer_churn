@@ -1,2 +1,122 @@
-stages: {}
+stages:
+  generate:
+    cmd: uv run python -m src.data.generate --scenario all
+    deps:
+      - src/data/generate.py
+      - src/data/settings.py
+    params:
+      - project.random_seed
+      - data_generation
+      - data_contract
+    outs:
+      - data/reference/reference.csv
+      - data/test/fixed_test.csv
+      - data/incoming/normal.csv
+      - data/incoming/drifted.csv
+      - data/incoming/invalid.csv
 
+  validate_normal:
+    cmd: >-
+      uv run python -m src.data.ingest
+      --input data/incoming/normal.csv
+    deps:
+      - data/incoming/normal.csv
+      - src/data/ingest.py
+      - src/data/schema.py
+      - src/data/settings.py
+      - src/data/validate.py
+      - src/data/validation_models.py
+      - src/data/validation_report.py
+    params:
+      - data_contract
+    outs:
+      - data/accepted/normal.csv
+      - reports/data-quality/normal.validation.json
+      - reports/data-quality/normal.validation.md
+
+  validate_drifted:
+    cmd: >-
+      uv run python -m src.data.ingest
+      --input data/incoming/drifted.csv
+    deps:
+      - data/incoming/drifted.csv
+      - src/data/ingest.py
+      - src/data/schema.py
+      - src/data/settings.py
+      - src/data/validate.py
+      - src/data/validation_models.py
+      - src/data/validation_report.py
+    params:
+      - data_contract
+    outs:
+      - data/accepted/drifted.csv
+      - reports/data-quality/drifted.validation.json
+      - reports/data-quality/drifted.validation.md
+
+  drift_normal:
+    cmd: >-
+      uv run python -m src.data.drift
+      --current data/accepted/normal.csv
+    deps:
+      - data/reference/reference.csv
+      - data/accepted/normal.csv
+      - src/data/drift.py
+      - src/data/schema.py
+      - src/data/settings.py
+      - src/data/validate.py
+      - src/data/validation_models.py
+    params:
+      - data_contract
+      - drift
+    outs:
+      - reports/drift/normal.drift.json
+      - reports/drift/normal.drift.html
+
+  drift_drifted:
+    cmd: >-
+      uv run python -m src.data.drift
+      --current data/accepted/drifted.csv
+    deps:
+      - data/reference/reference.csv
+      - data/accepted/drifted.csv
+      - src/data/drift.py
+      - src/data/schema.py
+      - src/data/settings.py
+      - src/data/validate.py
+      - src/data/validation_models.py
+    params:
+      - data_contract
+      - drift
+    outs:
+      - reports/drift/drifted.drift.json
+      - reports/drift/drifted.drift.html
+
+  curate:
+    cmd: uv run python -m src.data.curate
+    deps:
+      - data/reference/reference.csv
+      - data/accepted/normal.csv
+      - data/accepted/drifted.csv
+      - src/data/curate.py
+      - src/data/schema.py
+      - src/data/settings.py
+      - src/data/validate.py
+      - src/data/validation_models.py
+    params:
+      - data_contract
+    outs:
+      - data/curated/training.csv
+
+  profile:
+    cmd: uv run python -m src.data.profile
+    deps:
+      - data/curated/training.csv
+      - src/data/profile.py
+      - src/data/schema.py
+      - src/data/settings.py
+      - src/data/validate.py
+      - src/data/validation_models.py
+    params:
+      - data_contract
+    outs:
+      - reports/data-profile/training.profile.json

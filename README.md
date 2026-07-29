@@ -7,6 +7,10 @@ The project is being implemented incrementally according to [SPEC.md](./SPEC.md)
 The current implementation includes the repository foundation, deterministic
 synthetic-data scenarios, and data-contract validation.
 
+Detailed subsystem documentation:
+
+- [DataOps guide](./data/README.md)
+
 ## Development
 
 Prerequisites:
@@ -73,6 +77,17 @@ make drift-data CURRENT=data/accepted/normal.csv
 Feature drift is evaluated independently from target drift. The command writes a
 stable structured JSON decision and an Evidently HTML visualization under
 `reports/drift/`.
+
+Run the complete local DataOps pipeline with DVC:
+
+```bash
+make data-pipeline
+```
+
+DVC records code, data, and parameter dependencies in `dvc.yaml` and resolved
+content hashes in `dvc.lock`. Generated datasets and reports are stored in the local
+`.dvc/cache/`; no account or remote storage is required. Repeating the command
+reuses unchanged stages.
 
 Configuration that is safe to version belongs in `params.yaml`. Copy variable names
 from `.env.example` into a local `.env` file when integrations are introduced. Never

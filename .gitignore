@@ -28,6 +28,7 @@ Thumbs.db
 data/**
 !data/**/
 !data/**/.gitkeep
+!data/README.md
 artifacts/**
 !artifacts/**/
 !artifacts/**/.gitkeep

@@ -1,4 +1,4 @@
-.PHONY: install lint test generate-data process-batch curate-data profile-data drift-data
+.PHONY: install lint test generate-data process-batch curate-data profile-data drift-data data-pipeline
 
 install:
 	uv sync --locked
@@ -24,3 +24,6 @@ profile-data:
 
 drift-data:
 	uv run python -m src.data.drift --current "$(CURRENT)"
+
+data-pipeline:
+	uv run dvc repro
