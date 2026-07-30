@@ -11,6 +11,7 @@ Detailed subsystem documentation:
 
 - [DataOps guide](./data/README.md)
 - [Training and MLflow guide](./src/training/README.md)
+- [FastAPI serving guide](./src/api/README.md)
 
 ## Development
 
@@ -359,3 +360,36 @@ Optional: DVC push to DagsHub remote storage
 Configuration that is safe to version belongs in `params.yaml`. Copy variable names
 from `.env.example` into a local `.env` file when integrations are introduced. Never
 commit credentials.
+
+## FastAPI Serving
+
+After a model version has been promoted to the MLflow `champion` alias, the local
+API can serve that model directly from DagsHub MLflow:
+
+```bash
+make run-api
+```
+
+The API reads `MODEL_ALIAS` from `.env`. For the normal flow, use:
+
+```text
+MODEL_ALIAS=champion
+```
+
+The serving layer exposes:
+
+```text
+GET  /health
+GET  /model-info
+POST /predict
+```
+
+Build and run the local Docker image:
+
+```bash
+make docker-build
+make docker-run
+```
+
+Docker Hub is not needed for the current local serving test. The container reads
+credentials from `.env` at runtime and does not bake them into the image.

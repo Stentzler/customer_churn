@@ -1,4 +1,4 @@
-.PHONY: install lint test generate-data process-batch curate-data profile-data drift-data data-pipeline train-models track-models compare-model promote-model pipeline create-incoming-batch acceptance-local acceptance-remote
+.PHONY: install lint test generate-data process-batch curate-data profile-data drift-data data-pipeline train-models track-models compare-model promote-model run-api docker-build docker-run pipeline create-incoming-batch acceptance-local acceptance-remote
 
 install:
 	uv sync --locked
@@ -39,6 +39,15 @@ compare-model:
 
 promote-model:
 	uv run python -m src.training.compare --promote $(if $(VERSION),--candidate-version "$(VERSION)",)
+
+run-api:
+	uv run uvicorn src.api.main:create_app --factory --host 0.0.0.0 --port 8000
+
+docker-build:
+	docker build -t customer-churn-api:local .
+
+docker-run:
+	docker run --rm --env-file .env -p 8000:8000 customer-churn-api:local
 
 pipeline:
 	uv run python -m src.workflow.local_pipeline --input "$(INPUT)"
