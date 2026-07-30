@@ -215,6 +215,71 @@ To push only DVC data and reports without running a new pipeline:
 uv run dvc push -r origin
 ```
 
+## GitHub Actions Data Pipeline
+
+The future automated version of the local command lives in
+`.github/workflows/data-pipeline.yml`.
+
+It can be triggered in two ways:
+
+```text
+1. Push one DVC pointer for a CSV directly under data/incoming/
+2. Run the workflow manually and provide incoming_path
+```
+
+For a manual run, the file passed as `incoming_path` must already exist in the
+branch selected in the GitHub Actions UI. Because real data files are ignored by
+Git, the branch normally contains `data/incoming/<batch>.csv.dvc`, and DVC restores
+the real CSV during the workflow.
+
+A typical GitHub-triggered flow is:
+
+```bash
+# Create only a new incoming CSV. This does not validate, train, or register.
+make create-incoming-batch ARGS="--filename my-new-batch.csv"
+
+# Store the real CSV in the local DVC cache and create the Git-visible pointer.
+uv run dvc add data/incoming/my-new-batch.csv
+
+# Send the real CSV to the DagsHub DVC remote so GitHub Actions can pull it.
+uv run dvc push -r origin
+
+# Commit only the pointer file. The raw CSV remains ignored by Git.
+git add data/incoming/my-new-batch.csv.dvc
+git commit -m "Add incoming customer batch"
+git push
+```
+
+Then run the workflow manually and use:
+
+```text
+data/incoming/my-new-batch.csv
+```
+
+The workflow is split into clear jobs:
+
+| Job | Responsibility |
+|---|---|
+| `detect-input` | Finds the incoming CSV. Automatic runs require exactly one changed CSV under `data/incoming/`. |
+| `quality` | Installs the locked environment, runs linting, and runs the test suite. |
+| `run-pipeline` | Uses the `prod` GitHub environment, pulls DVC data, validates the batch, curates data, trains models, registers the selected model in DagsHub MLflow, pushes DVC data, and uploads reports. |
+| `commit-metadata` | Commits only Git/DVC metadata back to the branch: `dvc.lock` and `.dvc` pointer files. |
+
+The workflow uses GitHub Secrets instead of `.env`:
+
+```text
+DAGSHUB_USERNAME
+DAGSHUB_TOKEN
+DAGSHUB_REPOSITORY
+MLFLOW_TRACKING_URI
+MLFLOW_TRACKING_USERNAME
+MLFLOW_TRACKING_PASSWORD
+```
+
+In GitHub Actions, GitHub stores the code and DVC metadata. DagsHub DVC storage
+stores the real generated datasets and reports. DagsHub MLflow stores the
+experiment runs, metrics, artifacts, and registered model version.
+
 You can still process a manually supplied CSV:
 
 ```bash

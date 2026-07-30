@@ -222,6 +222,11 @@ def _build_argument_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Push DVC cache objects to the configured DagsHub DVC remote.",
     )
+    parser.add_argument(
+        "--create-only",
+        action="store_true",
+        help="Only create the incoming CSV; do not validate, train, or register.",
+    )
     return parser
 
 
@@ -231,6 +236,15 @@ def main(arguments: Sequence[str] | None = None) -> int:
     args = _build_argument_parser().parse_args(arguments)
     configure_logging()
     try:
+        if args.create_only:
+            write_acceptance_batch(
+                rows=args.rows,
+                seed=args.seed,
+                filename=args.filename,
+                params_path=args.params,
+                data_root=args.data_root,
+            )
+            return 0
         run_acceptance_scenario(
             rows=args.rows,
             seed=args.seed,

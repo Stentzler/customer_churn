@@ -1,0 +1,251 @@
+name: Data Pipeline
+
+on:
+  workflow_dispatch:
+    inputs:
+      incoming_path:
+        description: "Incoming CSV to process, for example data/incoming/batch.csv"
+        required: true
+        type: string
+  push:
+    branches:
+      - main
+    paths:
+      - "data/incoming/**/*.csv"
+      - "data/incoming/**/*.csv.dvc"
+      - "params.yaml"
+      - "dvc.yaml"
+      - "src/data/**"
+      - "src/training/**"
+      - "src/workflow/**"
+      - "src/agent/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/workflows/data-pipeline.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: data-pipeline-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  detect-input:
+    name: Detect Incoming Batch
+    runs-on: ubuntu-latest
+    outputs:
+      incoming_path: ${{ steps.resolve.outputs.incoming_path }}
+      should_run: ${{ steps.resolve.outputs.should_run }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve incoming CSV
+        id: resolve
+        shell: bash
+        env:
+          DISPATCH_INCOMING_PATH: ${{ inputs.incoming_path }}
+        run: |
+          set -euo pipefail
+
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            incoming_path="$DISPATCH_INCOMING_PATH"
+            if [[ ! "$incoming_path" =~ ^data/incoming/[^/]+\.csv$ ]]; then
+              echo "::error::incoming_path must be a CSV directly under data/incoming/"
+              exit 1
+            fi
+            if [[ ! -f "$incoming_path" && ! -f "${incoming_path}.dvc" ]]; then
+              echo "::error::Incoming file or DVC pointer does not exist: $incoming_path"
+              exit 1
+            fi
+            echo "incoming_path=$incoming_path" >> "$GITHUB_OUTPUT"
+            echo "should_run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          base="${{ github.event.before }}"
+          head="${{ github.sha }}"
+          if [[ "$base" =~ ^0+$ ]]; then
+            changed_files="$(git diff-tree --no-commit-id --name-only -r "$head")"
+          else
+            changed_files="$(git diff --name-only "$base" "$head")"
+          fi
+
+          mapfile -t incoming_files < <(
+            printf '%s\n' "$changed_files" |
+              grep -E '^data/incoming/[^/]+\.csv(\.dvc)?$' |
+              sed 's/\.dvc$//' |
+              sort -u || true
+          )
+
+          if [[ "${#incoming_files[@]}" -eq 0 ]]; then
+            echo "should_run=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [[ "${#incoming_files[@]}" -gt 1 ]]; then
+            printf 'Changed incoming files:\n%s\n' "${incoming_files[@]}"
+            echo "::error::Exactly one incoming CSV is supported per automatic run."
+            exit 1
+          fi
+
+          echo "incoming_path=${incoming_files[0]}" >> "$GITHUB_OUTPUT"
+          echo "should_run=true" >> "$GITHUB_OUTPUT"
+
+  quality:
+    name: Quality Gates
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Install Python
+        run: uv python install 3.12
+
+      - name: Install locked dependencies
+        run: make install
+
+      - name: Run lint checks
+        run: make lint
+
+      - name: Run tests
+        run: make test
+
+  run-pipeline:
+    name: Run DataOps And MLOps Pipeline
+    needs:
+      - detect-input
+      - quality
+    if: needs.detect-input.outputs.should_run == 'true'
+    runs-on: ubuntu-latest
+    environment: prod
+    timeout-minutes: 20
+    env:
+      DAGSHUB_USERNAME: ${{ secrets.DAGSHUB_USERNAME }}
+      DAGSHUB_TOKEN: ${{ secrets.DAGSHUB_TOKEN }}
+      DAGSHUB_REPOSITORY: ${{ secrets.DAGSHUB_REPOSITORY }}
+      MLFLOW_TRACKING_URI: ${{ secrets.MLFLOW_TRACKING_URI }}
+      MLFLOW_TRACKING_USERNAME: ${{ secrets.MLFLOW_TRACKING_USERNAME }}
+      MLFLOW_TRACKING_PASSWORD: ${{ secrets.MLFLOW_TRACKING_PASSWORD }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Install Python
+        run: uv python install 3.12
+
+      - name: Install locked dependencies
+        run: make install
+
+      - name: Configure DVC credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          required=(
+            DAGSHUB_USERNAME
+            DAGSHUB_TOKEN
+            DAGSHUB_REPOSITORY
+            MLFLOW_TRACKING_URI
+            MLFLOW_TRACKING_USERNAME
+            MLFLOW_TRACKING_PASSWORD
+          )
+          for name in "${required[@]}"; do
+            if [[ -z "${!name}" ]]; then
+              echo "::error::$name must be configured in the prod environment."
+              exit 1
+            fi
+          done
+
+          endpoint="https://dagshub.com/${DAGSHUB_USERNAME}/${DAGSHUB_REPOSITORY}.s3"
+          uv run dvc remote modify --local origin endpointurl "$endpoint"
+          uv run dvc remote modify --local origin access_key_id "$DAGSHUB_TOKEN"
+          uv run dvc remote modify --local origin secret_access_key "$DAGSHUB_TOKEN"
+
+      - name: Pull DVC cache
+        run: uv run dvc pull -r origin
+
+      - name: Run local pipeline
+        run: make pipeline INPUT="${{ needs.detect-input.outputs.incoming_path }}"
+
+      - name: Push DVC cache
+        run: uv run dvc push -r origin
+
+      - name: Package pipeline metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t dvc_files < <(find data reports -name '*.dvc' -type f | sort)
+          tar -czf pipeline-metadata.tar.gz dvc.lock "${dvc_files[@]}"
+
+      - name: Upload pipeline metadata
+        uses: actions/upload-artifact@v4
+        with:
+          name: pipeline-metadata
+          path: pipeline-metadata.tar.gz
+          if-no-files-found: error
+
+      - name: Upload data and training reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: pipeline-reports
+          path: |
+            reports/data-quality/
+            reports/data-profile/
+            reports/drift/
+            artifacts/metrics/
+          if-no-files-found: warn
+
+  commit-metadata:
+    name: Commit DVC Metadata
+    needs:
+      - detect-input
+      - run-pipeline
+    if: github.event_name == 'push' && needs.detect-input.outputs.should_run == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+
+      - name: Download pipeline metadata
+        uses: actions/download-artifact@v4
+        with:
+          name: pipeline-metadata
+
+      - name: Restore metadata files
+        run: tar -xzf pipeline-metadata.tar.gz
+
+      - name: Commit metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add dvc.lock data reports
+
+          if git diff --cached --quiet; then
+            echo "No DVC metadata changes to commit."
+            exit 0
+          fi
+
+          git commit -m "Track processed data pipeline artifacts"
+          git push

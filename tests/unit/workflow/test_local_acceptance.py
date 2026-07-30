@@ -169,3 +169,37 @@ def test_rejected_acceptance_result_fails(
             remote=False,
             push_dvc=False,
         )
+
+
+def test_create_only_cli_does_not_run_pipeline(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    created: list[object] = []
+    monkeypatch.setattr(
+        local_acceptance,
+        "write_acceptance_batch",
+        lambda **kwargs: created.append(kwargs) or tmp_path / "data/incoming/batch.csv",
+    )
+    monkeypatch.setattr(
+        local_acceptance,
+        "run_acceptance_scenario",
+        lambda **_: pytest.fail("create-only must not run the pipeline"),
+    )
+
+    status_code = local_acceptance.main(
+        [
+            "--create-only",
+            "--rows",
+            "50",
+            "--seed",
+            "2026073001",
+            "--filename",
+            "batch.csv",
+            "--data-root",
+            str(tmp_path / "data"),
+        ]
+    )
+
+    assert status_code == 0
+    assert created[0]["filename"] == "batch.csv"
