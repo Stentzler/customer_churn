@@ -1,4 +1,4 @@
-.PHONY: install lint test generate-data process-batch curate-data profile-data drift-data data-pipeline train-models track-models pipeline create-incoming-batch acceptance-local acceptance-remote
+.PHONY: install lint test generate-data process-batch curate-data profile-data drift-data data-pipeline train-models track-models compare-model promote-model pipeline create-incoming-batch acceptance-local acceptance-remote
 
 install:
 	uv sync --locked
@@ -33,6 +33,12 @@ train-models:
 
 track-models:
 	uv run python -m src.training.registry
+
+compare-model:
+	uv run python -m src.training.compare $(if $(VERSION),--candidate-version "$(VERSION)",)
+
+promote-model:
+	uv run python -m src.training.compare --promote $(if $(VERSION),--candidate-version "$(VERSION)",)
 
 pipeline:
 	uv run python -m src.workflow.local_pipeline --input "$(INPUT)"

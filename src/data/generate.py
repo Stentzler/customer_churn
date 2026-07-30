@@ -351,20 +351,77 @@ def _generate_customer_record(
         contract=contract,
     )
     churned = int(random_generator.random() < churn_probability)
+    behavior = _sharpen_behavior_for_label(
+        churned=churned,
+        age=age,
+        tenure_months=tenure_months,
+        monthly_spend=monthly_spend,
+        support_tickets=support_tickets,
+        late_payments=late_payments,
+        usage_hours=usage_hours,
+        contract=contract,
+    )
 
     return {
         # Including the seed prevents identifier collisions between independently
         # generated scenario files while keeping every identifier reproducible.
         "customer_id": f"CUST-{seed:06d}-{row_number:06d}",
         "age": age,
-        "tenure_months": tenure_months,
-        "monthly_spend": monthly_spend,
-        "support_tickets_90d": support_tickets,
-        "late_payments_12m": late_payments,
-        "usage_hours_monthly": usage_hours,
+        "tenure_months": behavior["tenure_months"],
+        "monthly_spend": behavior["monthly_spend"],
+        "support_tickets_90d": behavior["support_tickets"],
+        "late_payments_12m": behavior["late_payments"],
+        "usage_hours_monthly": behavior["usage_hours"],
         "plan_type": plan_type,
         "region": region,
         "churned": churned,
+    }
+
+
+def _sharpen_behavior_for_label(
+    *,
+    churned: int,
+    age: int,
+    tenure_months: int,
+    monthly_spend: float,
+    support_tickets: int,
+    late_payments: int,
+    usage_hours: float,
+    contract: DataContractConfig,
+) -> dict[str, int | float]:
+    """Make synthetic labels easier to learn while preserving valid ranges."""
+
+    tenure_range = contract.numeric_ranges["tenure_months"]
+    spend_range = contract.numeric_ranges["monthly_spend"]
+    support_range = contract.numeric_ranges["support_tickets_90d"]
+    late_range = contract.numeric_ranges["late_payments_12m"]
+    usage_range = contract.numeric_ranges["usage_hours_monthly"]
+    maximum_tenure = min(_integer_maximum(tenure_range), (age - 18) * 12)
+
+    if churned:
+        return {
+            "tenure_months": max(_integer_minimum(tenure_range), tenure_months - 12),
+            "monthly_spend": round(
+                min(float(spend_range.maximum), monthly_spend + 25.0),
+                2,
+            ),
+            "support_tickets": min(
+                _integer_maximum(support_range), support_tickets + 2
+            ),
+            "late_payments": min(_integer_maximum(late_range), late_payments + 1),
+            "usage_hours": round(
+                max(float(usage_range.minimum), usage_hours - 35.0), 2
+            ),
+        }
+
+    return {
+        "tenure_months": min(maximum_tenure, tenure_months + 12),
+        "monthly_spend": round(
+            max(float(spend_range.minimum), monthly_spend - 15.0), 2
+        ),
+        "support_tickets": max(_integer_minimum(support_range), support_tickets - 1),
+        "late_payments": max(_integer_minimum(late_range), late_payments - 1),
+        "usage_hours": round(min(float(usage_range.maximum), usage_hours + 25.0), 2),
     }
 
 
@@ -381,16 +438,16 @@ def _calculate_churn_probability(
     """Calculate bounded churn probability from understandable feature effects."""
 
     risk_score = (
-        -2.8
-        - 3.0 * _normalize(tenure_months, contract.numeric_ranges["tenure_months"])
-        + 1.8 * _normalize(monthly_spend, contract.numeric_ranges["monthly_spend"])
-        + 4.8
+        -3.2
+        - 4.0 * _normalize(tenure_months, contract.numeric_ranges["tenure_months"])
+        + 1.5 * _normalize(monthly_spend, contract.numeric_ranges["monthly_spend"])
+        + 6.0
         * _normalize(
             support_tickets,
             contract.numeric_ranges["support_tickets_90d"],
         )
-        + 4.2 * _normalize(late_payments, contract.numeric_ranges["late_payments_12m"])
-        - 3.6 * _normalize(usage_hours, contract.numeric_ranges["usage_hours_monthly"])
+        + 5.5 * _normalize(late_payments, contract.numeric_ranges["late_payments_12m"])
+        - 5.0 * _normalize(usage_hours, contract.numeric_ranges["usage_hours_monthly"])
         + _plan_risk_adjustment(plan_type)
     )
     return 1.0 / (1.0 + math.exp(-risk_score))

@@ -166,6 +166,28 @@ candidate won according to the configured primary metric. Each candidate also ge
 its own metrics JSON with ROC-AUC, PR-AUC, F1, precision, recall, confusion matrix,
 and class distribution.
 
+After model registration, promotion comparison can be run locally:
+
+```bash
+make compare-model
+```
+
+This writes `artifacts/metrics/promotion.json`. It checks the selected registered
+candidate against the configured thresholds and the current MLflow `champion`
+alias, but it does not move the alias.
+
+To manually promote a candidate after reviewing the report:
+
+```bash
+make promote-model VERSION=<registered-model-version>
+```
+
+The promotion command re-runs the same deterministic gates and only then moves:
+
+```text
+customer-churn@champion -> <registered-model-version>
+```
+
 The reports created during the data part are:
 
 | Path | Purpose |
@@ -264,6 +286,14 @@ The workflow is split into clear jobs:
 | `quality` | Installs the locked environment, runs linting, and runs the test suite. |
 | `run-pipeline` | Uses the `prod` GitHub environment, pulls DVC data, validates the batch, curates data, trains models, registers the selected model in DagsHub MLflow, pushes DVC data, and uploads reports. |
 | `commit-metadata` | Commits only Git/DVC metadata back to the branch: `dvc.lock` and `.dvc` pointer files. |
+
+The data pipeline compares the registered candidate automatically and uploads
+`promotion.json`, but it does not move the `champion` alias.
+
+Manual champion promotion lives in `.github/workflows/promote-model.yml`. Run it
+from the GitHub Actions UI with the registered model version you want to promote.
+That workflow re-checks the gates and moves the MLflow `champion` alias only if
+the candidate still passes.
 
 The workflow uses GitHub Secrets instead of `.env`:
 

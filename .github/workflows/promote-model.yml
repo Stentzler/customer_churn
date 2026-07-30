@@ -1,0 +1,70 @@
+name: Promote Model
+
+on:
+  workflow_dispatch:
+    inputs:
+      registered_model_version:
+        description: "Registered MLflow model version to promote"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: promote-model
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    name: Promote Champion Alias
+    runs-on: ubuntu-latest
+    environment: prod
+    timeout-minutes: 10
+    env:
+      MLFLOW_TRACKING_URI: ${{ secrets.MLFLOW_TRACKING_URI }}
+      MLFLOW_TRACKING_USERNAME: ${{ secrets.MLFLOW_TRACKING_USERNAME }}
+      MLFLOW_TRACKING_PASSWORD: ${{ secrets.MLFLOW_TRACKING_PASSWORD }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Install Python
+        run: uv python install 3.12
+
+      - name: Install locked dependencies
+        run: make install
+
+      - name: Validate MLflow credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          required=(
+            MLFLOW_TRACKING_URI
+            MLFLOW_TRACKING_USERNAME
+            MLFLOW_TRACKING_PASSWORD
+          )
+          for name in "${required[@]}"; do
+            if [[ -z "${!name}" ]]; then
+              echo "::error::$name must be configured in the prod environment."
+              exit 1
+            fi
+          done
+
+      - name: Promote registered model version
+        run: >-
+          make promote-model
+          VERSION="${{ inputs.registered_model_version }}"
+
+      - name: Upload promotion report
+        uses: actions/upload-artifact@v4
+        with:
+          name: promotion-report
+          path: artifacts/metrics/promotion.json
+          if-no-files-found: error

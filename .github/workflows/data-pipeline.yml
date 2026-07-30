@@ -182,6 +182,9 @@ jobs:
       - name: Run local pipeline
         run: make pipeline INPUT="${{ needs.detect-input.outputs.incoming_path }}"
 
+      - name: Compare registered candidate
+        run: make compare-model
+
       - name: Push DVC cache
         run: uv run dvc push -r origin
 

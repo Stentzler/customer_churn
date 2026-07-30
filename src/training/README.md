@@ -644,18 +644,21 @@ Implemented:
 - Selected-candidate model registration.
 - Model-version lineage tags.
 - Local CSV-to-registration orchestration.
+- Deterministic promotion comparison.
+- Manual champion alias promotion.
 
 Not implemented yet:
 
-- Champion alias management.
 - Fixed-test promotion comparison.
 - Prediction-threshold optimization.
 - LLM-generated plans and automatic fallback routing.
 - FastAPI serving and Docker publication.
 
 Registration intentionally creates a candidate model version with
-`candidate_status=selected_not_promoted`. It does not assign the `champion` alias.
-Champion comparison and promotion remain a later deterministic phase.
+`candidate_status=selected_not_promoted`. Promotion comparison writes
+`artifacts/metrics/promotion.json`. The `champion` alias moves only when
+`make promote-model` or the manual GitHub promotion workflow re-runs the gates and
+the candidate passes.
 
 Run the complete local lifecycle for a new delivery:
 
@@ -668,3 +671,15 @@ registration fails, the command returns a nonzero status. DagsHub registration i
 also skipped when the curated profile has the same `data_version` recorded by the
 last successful tracking receipt in
 `artifacts/metrics/mlflow-tracking.json`.
+
+Compare the latest registered candidate without moving the alias:
+
+```bash
+make compare-model
+```
+
+Promote a specific registered version after reviewing the report:
+
+```bash
+make promote-model VERSION=<registered-model-version>
+```

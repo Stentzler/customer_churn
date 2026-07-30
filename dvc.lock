@@ -5,8 +5,8 @@ stages:
     deps:
     - path: src/data/generate.py
       hash: md5
-      md5: 041ce2e88616a965541b52a8e608ac79
-      size: 15432
+      md5: 2b0ea6627b9302a774aab9ef115bdbba
+      size: 17485
     - path: src/data/settings.py
       hash: md5
       md5: 8ee344b78eaadc9d61b9f131e93f2533
@@ -65,31 +65,31 @@ stages:
     outs:
     - path: data/incoming/drifted.csv
       hash: md5
-      md5: 1adf3d600c7f08b56b000aff6a2c6279
-      size: 11684
+      md5: af3b5f8aeeb3eafa4a6104719ce3062e
+      size: 11725
     - path: data/incoming/invalid.csv
       hash: md5
-      md5: 03becbfbe6fc8df82a6530de440358ba
-      size: 11724
+      md5: 2d6aa4923c1f5c5dc6893bc150ca55f0
+      size: 11751
     - path: data/incoming/normal.csv
       hash: md5
-      md5: 4e9f6a85e50ee7aa092097b522a9d0ef
-      size: 11753
+      md5: 9754dc2f602fe8a69b1aad17be4a2a7d
+      size: 11768
     - path: data/reference/reference.csv
       hash: md5
-      md5: 63fef53949e3c7e52c021e0417015fde
-      size: 58260
+      md5: f4abc30f57d69e69f3c053481997fa30
+      size: 58343
     - path: data/test/fixed_test.csv
       hash: md5
-      md5: aef5ae67e8c3b7f53d1250e5cf5228a4
-      size: 17588
+      md5: c4cc99828d098b851db1f8be51864d54
+      size: 17629
   validate_normal:
     cmd: uv run python -m src.data.ingest --input data/incoming/normal.csv
     deps:
     - path: data/incoming/normal.csv
       hash: md5
-      md5: 4e9f6a85e50ee7aa092097b522a9d0ef
-      size: 11753
+      md5: 9754dc2f602fe8a69b1aad17be4a2a7d
+      size: 11768
     - path: src/data/ingest.py
       hash: md5
       md5: 3ab120d9dbd7afc0d541eabc9dfa258a
@@ -157,8 +157,8 @@ stages:
     outs:
     - path: data/accepted/normal.csv
       hash: md5
-      md5: 4e9f6a85e50ee7aa092097b522a9d0ef
-      size: 11753
+      md5: 9754dc2f602fe8a69b1aad17be4a2a7d
+      size: 11768
     - path: reports/data-quality/normal.validation.json
       hash: md5
       md5: e55f30bc780944e9a28bca3dcfbeb9b6
@@ -172,8 +172,8 @@ stages:
     deps:
     - path: data/incoming/drifted.csv
       hash: md5
-      md5: 1adf3d600c7f08b56b000aff6a2c6279
-      size: 11684
+      md5: af3b5f8aeeb3eafa4a6104719ce3062e
+      size: 11725
     - path: src/data/ingest.py
       hash: md5
       md5: 3ab120d9dbd7afc0d541eabc9dfa258a
@@ -241,8 +241,8 @@ stages:
     outs:
     - path: data/accepted/drifted.csv
       hash: md5
-      md5: 1adf3d600c7f08b56b000aff6a2c6279
-      size: 11684
+      md5: af3b5f8aeeb3eafa4a6104719ce3062e
+      size: 11725
     - path: reports/data-quality/drifted.validation.json
       hash: md5
       md5: c46d8243ab21c436f19770370a60f599
@@ -256,12 +256,12 @@ stages:
     deps:
     - path: data/accepted/normal.csv
       hash: md5
-      md5: 4e9f6a85e50ee7aa092097b522a9d0ef
-      size: 11753
+      md5: 9754dc2f602fe8a69b1aad17be4a2a7d
+      size: 11768
     - path: data/reference/reference.csv
       hash: md5
-      md5: 63fef53949e3c7e52c021e0417015fde
-      size: 58260
+      md5: f4abc30f57d69e69f3c053481997fa30
+      size: 58343
     - path: src/data/drift.py
       hash: md5
       md5: 81eda0254cf384b40f174011a732f9b0
@@ -328,23 +328,23 @@ stages:
     outs:
     - path: reports/drift/normal.drift.html
       hash: md5
-      md5: 7d81816c00850e1c6cece7f1b64cc074
-      size: 4041861
+      md5: 5781658cf4a6a1dcdd1eb10ceb082018
+      size: 4042487
     - path: reports/drift/normal.drift.json
       hash: md5
-      md5: 96b317808d5261f757cb3d3d2c552ef0
+      md5: 331cbb780f72a6451b518a51f11f3f0e
       size: 2253
   drift_drifted:
     cmd: uv run python -m src.data.drift --current data/accepted/drifted.csv
     deps:
     - path: data/accepted/drifted.csv
       hash: md5
-      md5: 1adf3d600c7f08b56b000aff6a2c6279
-      size: 11684
+      md5: af3b5f8aeeb3eafa4a6104719ce3062e
+      size: 11725
     - path: data/reference/reference.csv
       hash: md5
-      md5: 63fef53949e3c7e52c021e0417015fde
-      size: 58260
+      md5: f4abc30f57d69e69f3c053481997fa30
+      size: 58343
     - path: src/data/drift.py
       hash: md5
       md5: 81eda0254cf384b40f174011a732f9b0
@@ -411,24 +411,24 @@ stages:
     outs:
     - path: reports/drift/drifted.drift.html
       hash: md5
-      md5: bfddc70e96fb77f3a99a3d252934a982
-      size: 4040828
+      md5: 88b0d49875b2cfd770229fb94fb11036
+      size: 4042512
     - path: reports/drift/drifted.drift.json
       hash: md5
-      md5: 5a0051fe104362f292f0a03cadf74316
-      size: 2315
+      md5: 7606fa8053b215c8f6352521bba41ede
+      size: 2314
   curate:
     cmd: uv run python -m src.data.curate
     deps:
     - path: data/accepted
       hash: md5
-      md5: f0418e27fb24559da950900c32ef5f6a.dir
-      size: 50353
+      md5: 56bd2a6020bee60b44f7a664d7d134a4.dir
+      size: 50409
       nfiles: 7
     - path: data/reference/reference.csv
       hash: md5
-      md5: 63fef53949e3c7e52c021e0417015fde
-      size: 58260
+      md5: f4abc30f57d69e69f3c053481997fa30
+      size: 58343
     - path: src/data/curate.py
       hash: md5
       md5: a3a74396a1dea4c0bded40ff8cf74cdc
@@ -492,15 +492,15 @@ stages:
     outs:
     - path: data/curated/training.csv
       hash: md5
-      md5: a2fcb8e82329ed6e7fdc920f514fc9d9
-      size: 107850
+      md5: 54b1c620645f65aab83f89f02f2323dd
+      size: 107989
   profile:
     cmd: uv run python -m src.data.profile
     deps:
     - path: data/curated/training.csv
       hash: md5
-      md5: a2fcb8e82329ed6e7fdc920f514fc9d9
-      size: 107850
+      md5: 54b1c620645f65aab83f89f02f2323dd
+      size: 107989
     - path: src/data/profile.py
       hash: md5
       md5: 16025b441ea7dfb7a26ec4f5bb60f9e8
@@ -564,8 +564,8 @@ stages:
     outs:
     - path: reports/data-profile/training.profile.json
       hash: md5
-      md5: 9d93a57e2a9b162a4a7752b48ea51a54
-      size: 2364
+      md5: cfef57e9b4bc2f459782cf791fac8c59
+      size: 2376
   train:
     cmd: uv run python -m src.training.train
     deps:
@@ -575,8 +575,8 @@ stages:
       size: 684
     - path: data/curated/training.csv
       hash: md5
-      md5: a2fcb8e82329ed6e7fdc920f514fc9d9
-      size: 107850
+      md5: 54b1c620645f65aab83f89f02f2323dd
+      size: 107989
     - path: src/agent/plan_validator.py
       hash: md5
       md5: 0d15314df56587b6d416ab64919fb2b9
@@ -633,24 +633,24 @@ stages:
       size: 21
     - path: artifacts/metrics/logistic_regression.json
       hash: md5
-      md5: e84b60a59af61231b15458e7adbeeac8
-      size: 363
+      md5: d7d68e8887eca71947a58d4d0f9c4b28
+      size: 364
     - path: artifacts/metrics/random_forest.json
       hash: md5
-      md5: 460d269ab92942d71515fffe85303b39
-      size: 358
+      md5: 48d4c4828d12270b01f537adfe984354
+      size: 359
     - path: artifacts/metrics/selection.json
       hash: md5
-      md5: 2e973dd4033c2f4bc302dadb26d37703
-      size: 116
+      md5: 084a0c63e36589fce5d26cd871caf1a3
+      size: 117
     - path: artifacts/models/logistic_regression.joblib
       hash: md5
-      md5: f9a4d14f481661f8be41634b25bcc714
+      md5: 1d6d08c6d313c0b7d362bce45b6e3330
       size: 4058
     - path: artifacts/models/random_forest.joblib
       hash: md5
-      md5: c392735ae1179c74b3b1d77aace074c5
-      size: 3431051
+      md5: dade59e78aa4b5fd2c2ed581ab5695da
+      size: 2805243
   fallback_plan:
     cmd: uv run python -m src.agent.planner
     deps:
