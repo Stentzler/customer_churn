@@ -966,10 +966,11 @@ Changing an unrelated future API port should not invalidate the data pipeline.
 
 ### DVC Remote Storage
 
-The current cache exists only on this machine. A future DagsHub remote will allow
-another developer or CI runner to retrieve the same output versions.
+The repository uses the DagsHub-managed DVC remote named `origin`. Its non-secret
+S3-compatible endpoint is committed in `.dvc/config`; the DagsHub token is stored
+only in ignored `.dvc/config.local`.
 
-The conceptual workflow will be:
+The storage workflow is:
 
 ```text
 local dvc repro
@@ -992,8 +993,9 @@ make install
 uv run dvc pull
 ```
 
-Credentials will be stored locally or in CI secrets, never committed. Remote setup
-is intentionally deferred until the DagsHub repository and token are ready.
+Credentials are stored locally or in future CI secrets, never committed. Publish
+new cache objects with `uv run dvc push`; restore them on another machine with
+`uv run dvc pull`.
 
 ## Simulating New Incoming Data
 
@@ -1098,9 +1100,7 @@ git add data/**/*.dvc reports/**/*.dvc dvc.lock
 git commit -m "Process customer churn batch"
 ```
 
-The current repository has no DVC remote configured. Therefore this workflow
-versions data locally but cannot upload the cache yet. After a DagsHub DVC remote is
-configured, publish the cached objects with:
+The DagsHub DVC remote is configured as `origin`. Publish the cached objects with:
 
 ```bash
 uv run dvc push
@@ -1262,9 +1262,7 @@ uv lock --check
 The current DataOps subsystem intentionally does not:
 
 - Connect to a real upstream customer data source.
-- Automatically discover arbitrary incoming filenames in the DVC DAG.
-- Configure a DVC remote.
-- Trigger model training.
+- Automatically watch the incoming directory without an explicit command.
 - Decide whether a model should be promoted.
 - Send raw customer records to an LLM.
 - Run a permanent monitoring service.

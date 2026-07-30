@@ -5,6 +5,7 @@ description = "Auditable DataOps, MLOps, and constrained LLMOps lifecycle for sy
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 dependencies = [
+    "dvc[s3]>=3,<4",
     "evidently>=0.7,<0.8",
     "joblib>=1.4,<2",
     "mlflow>=3.5,<4",

@@ -12,6 +12,7 @@ venv/
 .coverage.*
 coverage.xml
 htmlcov/
+.tmp/
 
 # Local configuration and credentials
 .env

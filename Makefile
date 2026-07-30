@@ -1,4 +1,4 @@
-.PHONY: install lint test generate-data process-batch curate-data profile-data drift-data data-pipeline train-models track-models pipeline
+.PHONY: install lint test generate-data process-batch curate-data profile-data drift-data data-pipeline train-models track-models pipeline acceptance-local acceptance-remote
 
 install:
 	uv sync --locked
@@ -36,3 +36,9 @@ track-models:
 
 pipeline:
 	uv run python -m src.workflow.local_pipeline --input "$(INPUT)"
+
+acceptance-local:
+	uv run python scripts/local_acceptance.py
+
+acceptance-remote:
+	uv run python scripts/local_acceptance.py --remote --push-dvc

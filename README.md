@@ -102,6 +102,77 @@ registers the selected candidate in DagsHub. Invalid data stops before curation.
 When the resulting curated `data_version` was already registered by the previous
 successful execution, remote tracking is skipped to avoid duplicate model versions.
 
+## Local End-to-End Pipeline
+
+The fastest way to simulate a new delivery is to let the project create a fresh
+valid CSV and run the same local lifecycle that GitHub Actions will use later:
+
+```bash
+make acceptance-local
+```
+
+This creates a new file under `data/incoming/`, validates it, versions the batch
+artifacts with DVC, rebuilds the curated training dataset, profiles the data,
+trains candidates, and registers the selected model in a local SQLite MLflow
+backend under `.tmp/`. It does not contact DagsHub.
+
+To run the same scenario against DagsHub and push DVC objects to the configured
+DagsHub DVC remote:
+
+```bash
+make acceptance-remote
+```
+
+Remote mode reads credentials from `.env`, registers the selected model in the
+DagsHub MLflow registry, and runs `uv run dvc push -r origin` after the pipeline
+succeeds. The `.env` file and `.dvc/config.local` must remain local-only files.
+
+You can still process a manually supplied CSV:
+
+```bash
+make pipeline INPUT=data/incoming/my-new-batch.csv
+```
+
+The file must be directly under `data/incoming/`. Invalid files are routed to
+`data/rejected/` and stop before curation, training, and registration.
+
+Data flow:
+
+```text
+Synthetic or manual CSV
+        |
+        v
+data/incoming/<batch>.csv
+        |
+        v
+Pandera validation
+   |              |
+   | valid        | invalid
+   v              v
+data/accepted/   data/rejected/
+        |
+        v
+Evidently drift report
+        |
+        v
+DVC add raw, accepted, validation, and drift artifacts
+        |
+        v
+DVC repro profile + train
+        |
+        v
+Curated training data + data profile + model artifacts
+        |
+        v
+If curated data version changed
+        |
+        v
+MLflow candidate runs + selected model registration
+        |
+        v
+Optional: DVC push to DagsHub remote storage
+```
+
 Configuration that is safe to version belongs in `params.yaml`. Copy variable names
 from `.env.example` into a local `.env` file when integrations are introduced. Never
 commit credentials.
