@@ -422,9 +422,9 @@ stages:
     deps:
     - path: data/accepted
       hash: md5
-      md5: 2cdcafb8d231907b4d6f95cf60bc34c7.dir
-      size: 23438
-      nfiles: 3
+      md5: f0418e27fb24559da950900c32ef5f6a.dir
+      size: 50353
+      nfiles: 7
     - path: data/reference/reference.csv
       hash: md5
       md5: 63fef53949e3c7e52c021e0417015fde
@@ -492,15 +492,15 @@ stages:
     outs:
     - path: data/curated/training.csv
       hash: md5
-      md5: 151622acf53bb9804a37ce6a6d9abb8f
-      size: 81443
+      md5: a2fcb8e82329ed6e7fdc920f514fc9d9
+      size: 107850
   profile:
     cmd: uv run python -m src.data.profile
     deps:
     - path: data/curated/training.csv
       hash: md5
-      md5: 151622acf53bb9804a37ce6a6d9abb8f
-      size: 81443
+      md5: a2fcb8e82329ed6e7fdc920f514fc9d9
+      size: 107850
     - path: src/data/profile.py
       hash: md5
       md5: 16025b441ea7dfb7a26ec4f5bb60f9e8
@@ -564,8 +564,8 @@ stages:
     outs:
     - path: reports/data-profile/training.profile.json
       hash: md5
-      md5: 031f4efa93d2909346cd59828deb8b2c
-      size: 2379
+      md5: 9d93a57e2a9b162a4a7752b48ea51a54
+      size: 2364
   train:
     cmd: uv run python -m src.training.train
     deps:
@@ -575,8 +575,8 @@ stages:
       size: 684
     - path: data/curated/training.csv
       hash: md5
-      md5: 151622acf53bb9804a37ce6a6d9abb8f
-      size: 81443
+      md5: a2fcb8e82329ed6e7fdc920f514fc9d9
+      size: 107850
     - path: src/agent/plan_validator.py
       hash: md5
       md5: 0d15314df56587b6d416ab64919fb2b9
@@ -633,24 +633,24 @@ stages:
       size: 21
     - path: artifacts/metrics/logistic_regression.json
       hash: md5
-      md5: dc3c3e07a83ec75ae389b8ac75787239
-      size: 351
+      md5: e84b60a59af61231b15458e7adbeeac8
+      size: 363
     - path: artifacts/metrics/random_forest.json
       hash: md5
-      md5: e86c1119672b2dce0cfe1243dda0ca97
-      size: 347
+      md5: 460d269ab92942d71515fffe85303b39
+      size: 358
     - path: artifacts/metrics/selection.json
       hash: md5
-      md5: 862231307195f8cf442c164913dc94a8
-      size: 117
+      md5: 2e973dd4033c2f4bc302dadb26d37703
+      size: 116
     - path: artifacts/models/logistic_regression.joblib
       hash: md5
-      md5: eb4b1a244f98e448f0df5dba240b0254
+      md5: f9a4d14f481661f8be41634b25bcc714
       size: 4058
     - path: artifacts/models/random_forest.joblib
       hash: md5
-      md5: 5f3f3d98d06068e04738fbdfb4c6633f
-      size: 3038523
+      md5: c392735ae1179c74b3b1d77aace074c5
+      size: 3431051
   fallback_plan:
     cmd: uv run python -m src.agent.planner
     deps:

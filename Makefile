@@ -38,7 +38,7 @@ pipeline:
 	uv run python -m src.workflow.local_pipeline --input "$(INPUT)"
 
 acceptance-local:
-	uv run python scripts/local_acceptance.py
+	uv run python -m scripts.local_acceptance
 
 acceptance-remote:
-	uv run python scripts/local_acceptance.py --remote --push-dvc
+	uv run python -m scripts.local_acceptance --remote --push-dvc

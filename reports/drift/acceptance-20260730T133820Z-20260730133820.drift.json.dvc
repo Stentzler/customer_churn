@@ -1,0 +1,5 @@
+outs:
+- md5: 614a4c8f9bd435db0ae459a24da1d2f8
+  size: 2262
+  hash: md5
+  path: acceptance-20260730T133820Z-20260730133820.drift.json

@@ -1,0 +1,5 @@
+outs:
+- md5: af3abff7f9713fa92f9f74f88df6e9cd
+  size: 220
+  hash: md5
+  path: acceptance-20260730T133120Z-20260730133120.validation.json

@@ -104,6 +104,15 @@ successful execution, remote tracking is skipped to avoid duplicate model versio
 
 ## Local End-to-End Pipeline
 
+This repository uses four different systems together:
+
+| System | What it stores | What it is used for |
+|---|---|---|
+| Git / GitHub | Source code, configs, tests, docs, `dvc.yaml`, `dvc.lock`, and small `.dvc` pointer files | Code review, history, collaboration, and future GitHub Actions automation |
+| DVC | Real generated datasets, reports, profiles, and model artifacts in `.dvc/cache/` or the DagsHub DVC remote | Versioning large or generated files without committing them directly to Git |
+| MLflow | Experiment runs, metrics, parameters, artifacts, and registered model versions | Tracking what was trained and keeping model lineage |
+| DagsHub | Hosts the Git repository, DVC remote storage, and MLflow tracking/registry | One place to inspect code, data versions, experiment runs, and registered models |
+
 The fastest way to simulate a new delivery is to let the project create a fresh
 valid CSV and run the same local lifecycle that GitHub Actions will use later:
 
@@ -116,6 +125,57 @@ artifacts with DVC, rebuilds the curated training dataset, profiles the data,
 trains candidates, and registers the selected model in a local SQLite MLflow
 backend under `.tmp/`. It does not contact DagsHub.
 
+After this command, Git will usually show new files like:
+
+```text
+data/incoming/<batch>.csv.dvc
+data/accepted/<batch>.csv.dvc
+reports/data-quality/<batch>.validation.json.dvc
+reports/data-quality/<batch>.validation.md.dvc
+reports/drift/<batch>.drift.json.dvc
+reports/drift/<batch>.drift.html.dvc
+dvc.lock
+```
+
+These are metadata files. Git stores these small files, not the real CSV or HTML
+contents. The real files stay ignored by Git and are stored by DVC in `.dvc/cache/`.
+
+The batch flow is:
+
+1. The raw generated delivery is written to `data/incoming/<batch>.csv`.
+2. Validation accepts it and copies it to `data/accepted/<batch>.csv`.
+3. DVC creates `.dvc` pointer files for the raw batch, accepted batch, validation
+   reports, and drift reports.
+4. Curation rebuilds `data/curated/training.csv` from the reference data plus all
+   accepted batches.
+5. DVC updates `dvc.lock` with the new hashes for curated data, profile, training
+   metrics, and model artifacts.
+
+You can confirm curation and training happened by checking:
+
+```bash
+ls -lh data/curated/training.csv
+ls -lh artifacts/models/
+cat artifacts/metrics/selection.json
+cat artifacts/metrics/logistic_regression.json
+cat artifacts/metrics/random_forest.json
+```
+
+The main training result is `artifacts/metrics/selection.json`. It tells which
+candidate won according to the configured primary metric. Each candidate also gets
+its own metrics JSON with ROC-AUC, PR-AUC, F1, precision, recall, confusion matrix,
+and class distribution.
+
+The reports created during the data part are:
+
+| Path | Purpose |
+|---|---|
+| `reports/data-quality/<batch>.validation.json` | Machine-readable validation result |
+| `reports/data-quality/<batch>.validation.md` | Human-readable validation summary |
+| `reports/drift/<batch>.drift.json` | Structured drift decision used by automation |
+| `reports/drift/<batch>.drift.html` | Visual Evidently drift report for inspection |
+| `reports/data-profile/training.profile.json` | Aggregate profile of the curated training dataset, including `data_version` |
+
 To run the same scenario against DagsHub and push DVC objects to the configured
 DagsHub DVC remote:
 
@@ -126,6 +186,34 @@ make acceptance-remote
 Remote mode reads credentials from `.env`, registers the selected model in the
 DagsHub MLflow registry, and runs `uv run dvc push -r origin` after the pipeline
 succeeds. The `.env` file and `.dvc/config.local` must remain local-only files.
+
+After remote mode, DagsHub should show two separate things:
+
+1. DVC data storage receives the real generated files when `dvc push` succeeds.
+2. MLflow receives experiment runs and the selected registered model version.
+
+Locally, the MLflow tracking receipt is written to:
+
+```text
+artifacts/metrics/mlflow-tracking.json
+```
+
+That file records the selected model, registered model name, registered version,
+candidate run IDs, Git commit, and data version. In DagsHub, use the MLflow
+experiment page to inspect candidate runs, metrics, logged artifacts, and the
+registered model version.
+
+To confirm DVC remote storage is synchronized:
+
+```bash
+uv run dvc status -c -r origin
+```
+
+To push only DVC data and reports without running a new pipeline:
+
+```bash
+uv run dvc push -r origin
+```
 
 You can still process a manually supplied CSV:
 
