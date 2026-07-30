@@ -56,7 +56,7 @@ def test_new_data_version_runs_dvc_and_registers_selected_model(
 
     def run_dvc(arguments: tuple[str, ...]) -> None:
         commands.append(arguments)
-        if arguments == ("repro", "profile", "train"):
+        if arguments == ("repro", "profile", "train", "agent_analysis"):
             _write_data_version(paths["profile"], "new-version")
 
     result = run_local_pipeline(
@@ -78,7 +78,7 @@ def test_new_data_version_runs_dvc_and_registers_selected_model(
     assert result.data_version == "new-version"
     assert result.registered_model_version == "2"
     assert commands[0][0] == "add"
-    assert commands[1] == ("repro", "profile", "train")
+    assert commands[1] == ("repro", "profile", "train", "agent_analysis")
 
 
 def test_unchanged_curated_data_skips_remote_registration(
@@ -97,7 +97,7 @@ def test_unchanged_curated_data_skips_remote_registration(
     )
 
     def run_dvc(arguments: tuple[str, ...]) -> None:
-        if arguments == ("repro", "profile", "train"):
+        if arguments == ("repro", "profile", "train", "agent_analysis"):
             _write_data_version(paths["profile"], "same-version")
 
     result = run_local_pipeline(

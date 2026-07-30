@@ -12,6 +12,7 @@ Detailed subsystem documentation:
 - [DataOps guide](./data/README.md)
 - [Training and MLflow guide](./src/training/README.md)
 - [FastAPI serving guide](./src/api/README.md)
+- [Agent and LLMOps guide](./src/agent/README.md)
 
 ## Development
 
@@ -99,7 +100,8 @@ make pipeline INPUT=data/incoming/batch-001.csv
 
 The command validates and routes the batch, creates drift reports, versions the
 batch artifacts in the local DVC cache, reproduces curation through training, and
-registers the selected candidate in DagsHub. Invalid data stops before curation.
+creates an agent analysis report before registering the selected candidate in
+DagsHub. Invalid data stops before curation.
 When the resulting curated `data_version` was already registered by the previous
 successful execution, remote tracking is skipped to avoid duplicate model versions.
 
@@ -160,12 +162,17 @@ ls -lh artifacts/models/
 cat artifacts/metrics/selection.json
 cat artifacts/metrics/logistic_regression.json
 cat artifacts/metrics/random_forest.json
+cat artifacts/agent/agent-analysis.md
 ```
 
 The main training result is `artifacts/metrics/selection.json`. It tells which
 candidate won according to the configured primary metric. Each candidate also gets
 its own metrics JSON with ROC-AUC, PR-AUC, F1, precision, recall, confusion matrix,
 and class distribution.
+
+The agent analysis report is written to `artifacts/agent/agent-analysis.md`. It
+explains which plan was used, whether fallback was used, which experiments were
+approved, and what deterministic training selected.
 
 After model registration, promotion comparison can be run locally:
 

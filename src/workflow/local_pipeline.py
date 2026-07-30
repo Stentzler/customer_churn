@@ -121,8 +121,8 @@ def run_local_pipeline(
     )
 
     previous_data_version = _read_optional_data_version(tracking_output_path)
-    # Profile and train are sibling DVC stages, so both targets are explicit.
-    command_runner(("repro", "profile", "train"))
+    # Profile, train, and agent analysis are explicit sibling DVC targets.
+    command_runner(("repro", "profile", "train", "agent_analysis"))
     current_data_version = _read_required_data_version(profile_path)
 
     if current_data_version == previous_data_version:

@@ -1,4 +1,4 @@
-.PHONY: install lint test generate-data process-batch curate-data profile-data drift-data data-pipeline train-models track-models compare-model promote-model run-api docker-build docker-run pipeline create-incoming-batch acceptance-local acceptance-remote
+.PHONY: install lint test generate-data process-batch curate-data profile-data drift-data plan-experiments agent-analysis data-pipeline train-models track-models compare-model promote-model run-api docker-build docker-run pipeline create-incoming-batch acceptance-local acceptance-remote
 
 install:
 	uv sync --locked
@@ -24,6 +24,12 @@ profile-data:
 
 drift-data:
 	uv run python -m src.data.drift --current "$(CURRENT)"
+
+plan-experiments:
+	uv run python -m src.agent.planner
+
+agent-analysis:
+	uv run python -m src.agent.analyst
 
 data-pipeline:
 	uv run dvc repro
