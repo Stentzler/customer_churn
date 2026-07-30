@@ -654,10 +654,22 @@ stages:
   fallback_plan:
     cmd: uv run python -m src.agent.planner
     deps:
+    - path: prompts/experiment-planner.prompt.md
+      hash: md5
+      md5: 978e43252823ce0dfd73c5bba4033407
+      size: 1246
+    - path: src/agent/llm.py
+      hash: md5
+      md5: 7dd6d41c97c6744198773a429ef071e7
+      size: 4421
+    - path: src/agent/plan_validator.py
+      hash: md5
+      md5: 0d15314df56587b6d416ab64919fb2b9
+      size: 2827
     - path: src/agent/planner.py
       hash: md5
-      md5: a3a8c820653157e7190413746bff2fae
-      size: 3973
+      md5: 23ec18bbcccafdc478d54d37f5a7b4e3
+      size: 13907
     - path: src/agent/schemas.py
       hash: md5
       md5: cd8ddf509b5893729732f659d517e8fe
@@ -688,6 +700,10 @@ stages:
               max_depth: 8
               min_samples_leaf: 2
     outs:
+    - path: artifacts/agent/planner-trace.json
+      hash: md5
+      md5: 057dc10a4e837ef5fa05365f20003a16
+      size: 817
     - path: artifacts/experiment-plans/fallback.json
       hash: md5
       md5: d4da6761f21d116880f7c09605bb266e
