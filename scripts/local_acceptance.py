@@ -63,6 +63,7 @@ def run_acceptance_scenario(
         params_path=params_path,
         env_path=env_path,
         data_root=data_root,
+        force_retrain=True,
     )
     if result.status is LocalPipelineStatus.REJECTED:
         raise LocalAcceptanceError(
@@ -168,6 +169,7 @@ def write_local_mlflow_env(
                 (
                     f"MLFLOW_TRACKING_URI={backend_uri}",
                     f"MLFLOW_ARTIFACT_ROOT={artifact_uri}",
+                    "LLM_ENABLED=false",
                     "",
                 )
             ),
@@ -179,6 +181,7 @@ def write_local_mlflow_env(
         ) from error
     os.environ["MLFLOW_TRACKING_URI"] = backend_uri
     os.environ["MLFLOW_ARTIFACT_ROOT"] = artifact_uri
+    os.environ["LLM_ENABLED"] = "false"
     return output_path
 
 

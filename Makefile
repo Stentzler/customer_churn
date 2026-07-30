@@ -29,7 +29,7 @@ plan-experiments:
 	uv run python -m src.agent.planner
 
 agent-analysis:
-	uv run python -m src.agent.analyst
+	uv run python -m src.agent.analyst $(if $(PROMOTION),--promotion "$(PROMOTION)",)
 
 data-pipeline:
 	uv run dvc repro
@@ -56,7 +56,7 @@ docker-run:
 	docker run --rm --env-file .env -p 8000:8000 customer-churn-api:local
 
 pipeline:
-	uv run python -m src.workflow.local_pipeline --input "$(INPUT)"
+	uv run python -m src.workflow.local_pipeline --input "$(INPUT)" $(if $(filter 1 true yes,$(FORCE_RETRAIN)),--force-retrain,)
 
 create-incoming-batch:
 	uv run python -m scripts.local_acceptance --create-only $(ARGS)

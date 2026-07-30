@@ -6,8 +6,8 @@
 |---|---|
 | Project | `customer-churn-agentic-mlops` |
 | Document | `SPEC.md` |
-| Status | Draft for review |
-| Version | `0.1.0` |
+| Status | Approved implementation scope |
+| Version | `0.2.0` |
 | Architecture | Single repository |
 | Primary objective | Demonstrate a complete automated DataOps, MLOps, and constrained LLMOps lifecycle |
 
@@ -15,15 +15,15 @@
 
 This project will implement a small but complete machine-learning lifecycle for a synthetic customer churn use case.
 
-The system will detect a new labeled data batch, validate it, version it, analyze drift, optionally retrain a set of candidate models, track experiments, compare the best candidate with the current champion, promote only an objectively better model, package the promoted model in a FastAPI service, build a Docker image, and publish that image to Docker Hub.
+The system will detect a new labeled data batch, validate it, version it, analyze drift, optionally retrain a set of candidate models, track experiments, compare the best candidate with the current champion, promote only an objectively better model, and expose the promoted pipeline through FastAPI.
 
-An LLM will participate in the training workflow through LangChain and LangGraph. Its responsibility will be limited to proposing bounded experiment plans and explaining results. It will not validate data, execute arbitrary code, choose the winning model, approve promotion, or control deployment quality gates.
+An optional LLM may participate through a small provider abstraction. Its responsibility is limited to proposing bounded experiment plans and explaining verified results. LangChain and LangGraph are not required for version one because the workflow does not need their additional abstraction. The LLM will not validate data, execute arbitrary code, choose the winning model, approve promotion, or control serving quality gates.
 
 The defining principle is:
 
 > The LLM proposes and explains. Deterministic code validates, trains, evaluates, and promotes.
 
-The first version will prioritize the automation cycle over model sophistication. It will use synthetic data, lightweight scikit-learn models, GitHub Actions for orchestration, DVC for data and pipeline versioning, Evidently for drift analysis, Pandera for data contracts, MLflow with DagsHub for experiment tracking and model registry, FastAPI for inference, and Docker Hub for image publication.
+The first version will prioritize the automated DataOps and MLOps cycle over model sophistication or agent complexity. It will use synthetic data, lightweight scikit-learn models, Python and GitHub Actions for orchestration, DVC for data and pipeline versioning, Evidently for drift analysis, Pandera for data contracts, MLflow with DagsHub for experiment tracking and model registry, and FastAPI for local inference.
 
 ## 3. Project Goals
 
@@ -35,7 +35,7 @@ The project must:
 4. Validate all incoming data before it enters the training dataset.
 5. Version datasets, generated reports, pipeline stages, and relevant model artifacts.
 6. Evaluate feature drift and target drift independently.
-7. Use an LLM to propose a constrained experiment plan.
+7. Optionally use an LLM to propose a constrained experiment plan.
 8. Validate every LLM-generated plan before execution.
 9. Provide a deterministic fallback plan when the LLM is unavailable or invalid.
 10. Train and evaluate multiple lightweight candidate models.
@@ -44,11 +44,9 @@ The project must:
 13. Promote only models that satisfy all configured requirements.
 14. Package the full preprocessing and prediction pipeline for serving.
 15. Expose the promoted model through a small FastAPI application.
-16. Build and test a Docker image automatically.
-17. Publish promoted model images to Docker Hub.
-18. Run without paid infrastructure requirements.
-19. Be reproducible locally and in GitHub Actions.
-20. Be understandable enough to serve as a portfolio and learning project.
+16. Run without paid infrastructure requirements.
+17. Be reproducible locally and in GitHub Actions.
+18. Be understandable enough to serve as a portfolio and learning project.
 
 ## 4. Non-Goals
 
@@ -72,8 +70,11 @@ The first version will not include:
 - Automatic rollback in a runtime environment.
 - A paid model-hosting platform.
 - A permanent cloud deployment.
+- Docker Hub publication or another container-registry publication flow.
+- Automated deployment of the FastAPI application.
+- LangChain or LangGraph as required orchestration dependencies.
 
-Optional free container hosting may be evaluated later, but Docker Hub publication is the required deployment artifact for version one.
+The existing Dockerfile may remain as an optional local-development convenience. Building, publishing, or deploying a container is not part of the version-one acceptance criteria.
 
 ## 5. Business Scenario
 
@@ -132,8 +133,7 @@ The following decisions must be made only by deterministic code:
 - Which trained candidate achieved the best configured metric.
 - Whether the candidate satisfies promotion thresholds.
 - Whether the model artifact can be loaded.
-- Whether API contract and smoke tests pass.
-- Whether a Docker image may be published.
+- Whether API contract and integration tests pass.
 
 ### 6.2 Constrained LLM Participation
 
@@ -160,7 +160,6 @@ The LLM must not:
 - Skip required workflow stages.
 - Select the winning model.
 - Promote a model.
-- Publish an image.
 - Invent metrics or pipeline results.
 
 ### 6.3 Reproducibility
@@ -177,7 +176,6 @@ Every training run must be traceable to:
 - Dependency lock file.
 - Training and evaluation metrics.
 - Registered model version.
-- Docker image tags when promoted.
 
 ### 6.4 Training-Serving Consistency
 
@@ -212,7 +210,7 @@ The API must not reproduce preprocessing manually. It must load one artifact tha
                  Build dataset profile
                          |
                          v
-              LangChain experiment planner
+              Optional experiment planner
                          |
                          v
               Deterministic plan validator
@@ -241,12 +239,6 @@ The API must not reproduce preprocessing manually. It must load one artifact tha
                                 |
                                 v
                          test FastAPI service
-                                |
-                                v
-                         build Docker image
-                                |
-                                v
-                          push Docker Hub
 
 ## 8. Repository Structure
 
@@ -255,22 +247,25 @@ The API must not reproduce preprocessing manually. It must load one artifact tha
     │   └── workflows/
     │       ├── ci.yml
     │       ├── data-pipeline.yml
-    │       └── publish-image.yml
+    │       └── promote-model.yml
     │
     ├── data/
     │   ├── reference/
     │   ├── incoming/
     │   ├── accepted/
+    │   ├── rejected/
     │   ├── curated/
     │   └── test/
     │
     ├── artifacts/
     │   ├── models/
     │   ├── metrics/
-    │   └── experiment-plans/
+    │   ├── experiment-plans/
+    │   └── agent/
     │
     ├── reports/
     │   ├── data-quality/
+    │   ├── data-profile/
     │   ├── drift/
     │   └── training/
     │
@@ -303,10 +298,7 @@ The API must not reproduce preprocessing manually. It must load one artifact tha
     │   │   └── registry.py
     │   │
     │   ├── workflow/
-    │   │   ├── state.py
-    │   │   ├── nodes.py
-    │   │   ├── conditions.py
-    │   │   └── graph.py
+    │   │   └── local_pipeline.py
     │   │
     │   └── api/
     │       ├── main.py
@@ -329,7 +321,7 @@ The API must not reproduce preprocessing manually. It must load one artifact tha
     ├── SPEC.md
     └── README.md
 
-The future `AGENTS.md` file will define implementation conventions and instructions for coding agents. It is intentionally excluded from this specification revision until separately reviewed.
+`AGENTS.md` defines implementation conventions and instructions for coding agents. `SPEC.md` remains authoritative for product scope and required behavior.
 
 ## 9. Technology Stack
 
@@ -344,19 +336,17 @@ The future `AGENTS.md` file will define implementation conventions and instructi
 | Model training | scikit-learn |
 | Experiment tracking | MLflow |
 | Remote ML platform | DagsHub |
-| LLM application framework | LangChain |
-| Workflow graph | LangGraph |
-| Initial LLM provider | GitHub Models |
+| Optional LLM integration | Provider-neutral OpenAI-compatible interface |
+| Initial LLM provider | Groq free tier |
+| Workflow orchestration | Python application service, DVC, and GitHub Actions |
 | API framework | FastAPI |
 | Request and response validation | Pydantic |
 | ASGI server | Uvicorn |
-| Containerization | Docker |
-| Container registry | Docker Hub |
 | Automation | GitHub Actions |
 | Code quality | Ruff |
 | Testing | pytest |
 
-The LLM provider must be abstracted so it can be replaced without changing the domain workflow.
+The LLM provider must be abstracted so it can be replaced through environment configuration without changing the domain workflow. LangChain may be introduced later only if it removes meaningful provider or structured-output complexity.
 
 ## 10. Functional Requirements
 
@@ -473,7 +463,8 @@ The first version must support:
 
 - Logistic Regression.
 - Random Forest Classifier.
-- HistGradientBoosting Classifier.
+
+These two candidates are sufficient for version one because they provide one interpretable baseline and one nonlinear baseline. Additional models are optional extensions rather than lifecycle requirements.
 
 The model catalog must be implemented in Python and include:
 
@@ -499,7 +490,9 @@ The fallback plan must:
 
 ### FR-010 — Generate a Constrained Experiment Plan
 
-The LangChain planner must receive only structured summaries and must return a Pydantic-validated `ExperimentPlan`.
+The optional planner must return a Pydantic-validated `ExperimentPlan` through the provider-neutral interface.
+
+The planner may receive only bounded policy information and structured summaries. It must never receive raw customer rows or credentials. Data-profile and drift context may be added when it materially improves experiment proposals, but version one does not require the LLM to influence model quality.
 
 The plan must include:
 
@@ -594,6 +587,8 @@ A non-promoted model must not replace the `champion` alias.
 
 The promotion comparison must be deterministic.
 
+Candidate selection must continue to use the training/validation split. Only the selected registered candidate may then be evaluated against the immutable fixed-test dataset for promotion. The current champion must be evaluated against the same fixed-test dataset and metric implementation so the comparison remains fair.
+
 The initial example policy is:
 
 - Candidate ROC-AUC is at least `0.80`.
@@ -601,7 +596,7 @@ The initial example policy is:
 - Candidate recall is at least `0.65`.
 - Candidate ROC-AUC exceeds champion ROC-AUC by at least `0.005`.
 - The model artifact loads successfully.
-- FastAPI integration tests pass.
+- The complete artifact produces a valid prediction through the FastAPI-compatible serving contract.
 
 All thresholds must be configurable through `params.yaml`.
 
@@ -609,7 +604,7 @@ When no champion exists, the first model may be promoted only if it satisfies al
 
 ### FR-017 — Generate a Final Analysis
 
-After evaluation, the LLM may generate a human-readable report from verified structured results.
+After evaluation, the system must generate a human-readable report from verified structured results. Deterministic report generation is sufficient. An LLM may optionally improve the narrative when available.
 
 The report may explain:
 
@@ -653,39 +648,15 @@ The FastAPI application must expose:
 
 The serving application must not invoke the LLM.
 
-### FR-019 — Build a Minimal Serving Image
+## 11. Workflow Orchestration Specification
 
-The serving image must include only runtime requirements.
+Version one uses explicit Python orchestration together with DVC stages and GitHub Actions. LangGraph is not required.
 
-Training-only tools such as DVC, Evidently, LangChain, LangGraph, and MLflow client components not required at runtime should not be included unless technically necessary for artifact loading.
-
-The image must:
-
-- Start the FastAPI application.
-- Load the promoted model artifact.
-- Pass a container smoke test.
-- Expose the configured API port.
-- Use a non-root runtime user where practical.
-
-### FR-020 — Publish Docker Images
-
-A successful promotion must trigger image publication.
-
-Required tags:
-
-- `latest`
-- `model-v<registered-model-version>`
-- `<git-sha>`
-
-The `latest` tag must move only after all promotion and image tests pass.
-
-A rejected candidate must not publish or retag an image.
-
-## 11. LangGraph Workflow Specification
-
-The graph must contain explicit nodes equivalent to:
+The workflow must preserve an equivalent sequence:
 
     validate_data
+        |
+        +---- invalid ----> reject batch, write reports, stop
         |
         v
     version_data
@@ -693,62 +664,36 @@ The graph must contain explicit nodes equivalent to:
         v
     calculate_drift
         |
-        v
-    should_retrain?
-        +---- false ----> create_no_retrain_report
+        +---- no significant drift ----> write reports, stop automatic training
         |
-        +---- true
-                 |
-                 v
-             build_profile
-                 |
-                 v
-             generate_experiment_plan
-                 |
-                 v
-             validate_experiment_plan
-                 |
-                 v
-             train_candidates
-                 |
-                 v
-             evaluate_candidates
-                 |
-                 v
-             compare_with_champion
-                 |
-                 v
-             should_promote?
-                 +---- false ----> rejection_report
-                 |
-                 +---- true -----> promote_model
-                                      |
-                                      v
-                              generate_final_analysis
+        v
+    curate_and_profile
+        |
+        v
+    generate_or_load_experiment_plan
+        |
+        v
+    validate_experiment_plan
+        |
+        v
+    train_and_evaluate_candidates
+        |
+        v
+    log_and_register_selected_candidate
+        |
+        v
+    compare_with_champion
+        |
+        +---- rejected ----> write promotion report
+        |
+        +---- approved ----> manual promotion may assign champion alias
+                                  |
+                                  v
+                          generate final analysis
 
-Only these nodes may require LLM inference:
+Only experiment planning and optional narrative analysis may require LLM inference. Every route and quality gate must remain deterministic and testable without an LLM.
 
-- `generate_experiment_plan`
-- `generate_final_analysis`
-
-Workflow state must contain references and structured summaries rather than full raw datasets.
-
-Example state fields:
-
-| Field | Purpose |
-|---|---|
-| `incoming_data_path` | New batch location |
-| `curated_data_path` | Curated training dataset |
-| `test_data_path` | Immutable test dataset |
-| `validation_report_path` | Data-contract result |
-| `drift_report_path` | Evidently report |
-| `dataset_profile_path` | Structured profile |
-| `experiment_plan_path` | Approved or fallback plan |
-| `candidate_run_ids` | MLflow candidate runs |
-| `best_candidate_run_id` | Selected candidate |
-| `promotion_result` | Approved or rejected |
-| `registered_model_version` | Registered version when created |
-| `final_report_path` | Human-readable analysis |
+The orchestrator should pass paths, identifiers, and structured summaries between operations rather than complete datasets. It may call existing subsystem functions directly; a workflow framework should be introduced only if branching, persistence, or recovery complexity later justifies it.
 
 ## 12. DVC Pipeline Specification
 
@@ -780,7 +725,7 @@ The initial `dvc.yaml` should model stages equivalent to:
         v
     register
 
-The exact division between DVC stages and LangGraph orchestration may be adjusted during implementation, but the following must remain true:
+The exact division between DVC stages and Python orchestration may be adjusted during implementation, but the following must remain true:
 
 - Each deterministic stage has declared inputs and outputs.
 - Re-running unchanged stages should reuse DVC caching where applicable.
@@ -809,10 +754,12 @@ Expected CI secrets include:
 
 - `DAGSHUB_USERNAME`
 - `DAGSHUB_TOKEN`
-- `DOCKERHUB_USERNAME`
-- `DOCKERHUB_TOKEN`
+- `DAGSHUB_REPOSITORY`
+- `MLFLOW_TRACKING_URI`
+- `MLFLOW_TRACKING_USERNAME`
+- `MLFLOW_TRACKING_PASSWORD`
 
-GitHub Models should use the workflow-provided GitHub token where supported. The project must support disabling LLM use and falling back to the deterministic plan.
+Optional LLM configuration may include provider, model, base URL, API key, timeout, temperature, and output-token limits. The project must support disabling LLM use and falling back to the deterministic plan. Missing LLM credentials must not prevent the DataOps and MLOps lifecycle from running.
 
 ## 14. GitHub Actions Workflows
 
@@ -832,23 +779,20 @@ Responsibilities:
 - Run data-schema tests.
 - Run experiment-plan validator tests.
 - Run FastAPI contract tests.
-- Verify the Docker image builds.
 
 Security requirements:
 
-- External publishing secrets must not be exposed to untrusted pull requests.
-- CI must not register, promote, or publish models.
+- External integration secrets must not be exposed to untrusted pull requests.
+- CI must not register or promote models.
 
 ### 14.2 `data-pipeline.yml`
 
 Triggers:
 
 - Changes under `data/incoming/**`.
-- Relevant changes to `params.yaml`.
-- Relevant changes under `src/data/**`.
-- Relevant changes under `src/training/**`.
-- Relevant changes under `src/agent/**`.
 - Manual execution through `workflow_dispatch`.
+
+Source or configuration changes may trigger CI or the quality portion of the data workflow, but automatic data processing requires exactly one identifiable incoming batch. The workflow must never guess which historical batch to process.
 
 Responsibilities:
 
@@ -856,29 +800,30 @@ Responsibilities:
 - Pull required DVC artifacts.
 - Validate incoming data.
 - Run curation and drift analysis.
-- Execute the LangGraph workflow.
+- Execute the Python workflow orchestrator.
 - Generate or select an experiment plan.
 - Train and evaluate candidates when required.
 - Log experiments.
 - Register the selected candidate.
-- Apply the promotion policy.
+- Compare the selected candidate with the current champion.
 - Publish reports and pipeline artifacts.
-- Trigger the image workflow only after promotion.
 
-### 14.3 `publish-image.yml`
+The data pipeline must not move the `champion` alias automatically. Registration and promotion remain separate operations.
+
+### 14.3 `promote-model.yml`
 
 Trigger:
 
-- Successful model promotion through an explicit workflow handoff or reusable workflow call.
+- Manual `workflow_dispatch` with an explicit registered model version.
 
 Responsibilities:
 
-- Resolve the promoted model version.
-- Obtain or export the complete serving artifact.
-- Build the runtime image.
-- Start the container.
-- Execute health and prediction smoke tests.
-- Push required Docker Hub tags.
+- Resolve the requested registered model version.
+- Re-run deterministic promotion gates.
+- Verify the registered artifact loads.
+- Require the configured API compatibility gate.
+- Move the `champion` alias only when every gate passes.
+- Publish the structured promotion report.
 
 ## 15. Testing Strategy
 
@@ -921,7 +866,7 @@ Contract tests must verify:
 - Output response structure.
 - `/health` behavior.
 - `/model-info` behavior.
-- Model artifact compatibility with the API image.
+- Model artifact compatibility with the FastAPI serving layer.
 
 ### 15.4 End-to-End Scenarios
 
@@ -932,7 +877,7 @@ The project must demonstrate at least these scenarios:
 3. Drifted valid data triggers candidate training.
 4. A weaker candidate is registered but not promoted.
 5. A stronger candidate is promoted.
-6. Promotion causes a Docker image to be built and tagged.
+6. The promoted alias can be loaded and served by FastAPI.
 7. LLM unavailability causes deterministic fallback rather than pipeline failure.
 
 ## 16. Observability and Artifacts
@@ -948,9 +893,8 @@ Each pipeline execution must make the following results available through logs o
 - Candidate metrics table.
 - Champion comparison.
 - Promotion decision and reasons.
-- Final LLM-generated analysis when available.
+- Final deterministic or LLM-assisted analysis.
 - Registered model version.
-- Published Docker image tags when applicable.
 
 Logs must not include:
 
@@ -971,24 +915,20 @@ Logs must not include:
 | Candidate training failure | Record failed experiment and continue only when policy allows |
 | All candidates fail | Stop before registration or promotion |
 | MLflow logging failure | Stop promotion because traceability is incomplete |
-| Registry failure | Stop image workflow |
+| Registry failure | Stop before comparison or promotion |
 | Candidate below threshold | Register for traceability, do not promote |
-| API integration failure | Do not promote or publish |
-| Docker smoke-test failure | Do not push or retag `latest` |
-| Docker Hub push failure | Preserve promotion records and report publication failure |
+| API integration failure | Do not promote |
 
 ## 18. Security Requirements
 
 - No credentials may be committed.
-- `.env.example` must contain names only, not real values.
+- `.env.example` may contain variable names and safe non-secret defaults, but never credentials.
 - CI secrets must use GitHub encrypted secrets.
-- Pull-request workflows must not receive publishing secrets.
+- Pull-request workflows must not receive DagsHub, MLflow, or LLM credentials.
 - LLM input must contain summaries rather than raw data.
 - LLM output must be treated as untrusted input.
 - The plan validator must reject unknown fields when practical.
-- The API container should run as a non-root user where practical.
-- Runtime images should not contain training datasets.
-- Docker Hub access should use a scoped access token rather than an account password.
+- FastAPI responses and logs must not expose tracking credentials or sensitive model URIs.
 
 ## 19. Performance and Cost Constraints
 
@@ -1094,7 +1034,7 @@ Exit criteria:
 Deliverables:
 
 - Provider abstraction.
-- GitHub Models integration.
+- OpenAI-compatible provider integration.
 - Structured experiment-plan schema.
 - Plan validator.
 - Fallback behavior.
@@ -1106,15 +1046,14 @@ Exit criteria:
 - Invalid plans are rejected.
 - Provider failure triggers fallback.
 
-### Phase 7 — LangGraph Orchestration
+### Phase 7 — Workflow Orchestration
 
 Deliverables:
 
-- Workflow state.
-- Deterministic nodes.
+- Python application service for local orchestration.
 - Conditional routing.
-- LLM planner node.
-- Final analysis node.
+- Optional LLM planning step.
+- Deterministic final analysis.
 - Local workflow entry point.
 
 Exit criteria:
@@ -1151,20 +1090,20 @@ Exit criteria:
 
 - The API loads the complete pipeline and returns reproducible predictions.
 
-### Phase 10 — Container and Docker Hub Publication
+### Phase 10 — GitHub Actions Lifecycle
 
 Deliverables:
 
-- Minimal Dockerfile.
-- Container smoke tests.
-- Docker Hub publishing workflow.
-- Immutable model-version and Git-SHA tags.
-- Controlled `latest` tag.
+- CI workflow without external credentials.
+- Incoming-data workflow with DVC and MLflow credentials.
+- Uploaded quality, drift, training, planning, and promotion artifacts.
+- Separate manual promotion workflow.
+- Explicit GitHub environment protection for remote operations.
 
 Exit criteria:
 
-- Only a promoted model produces a published image.
-- The published image starts and answers health and prediction requests.
+- A new incoming batch can run through the remote DataOps and MLOps lifecycle.
+- Promotion remains an explicit, deterministic, separately auditable operation.
 
 ### Phase 11 — Documentation and Demonstration
 
@@ -1175,7 +1114,7 @@ Deliverables:
 - Demonstration scenarios.
 - Local execution guide.
 - GitHub Actions explanation.
-- DagsHub and Docker Hub links.
+- DagsHub tracking and registry explanation.
 
 Exit criteria:
 
@@ -1201,12 +1140,11 @@ The first version is complete when all of the following are true:
 14. The candidate is compared with the champion deterministically.
 15. A failing candidate cannot become champion.
 16. A passing candidate receives the champion alias.
-17. The FastAPI service loads the complete promoted pipeline.
-18. API contract and smoke tests pass.
-19. A promoted model produces Docker image tags for `latest`, model version, and Git SHA.
-20. A rejected model produces no deployment image.
-21. The complete lifecycle can run without paid compute infrastructure.
-22. Documentation explains DataOps, MLOps, and LLMOps responsibilities clearly.
+17. Promotion uses the immutable fixed-test dataset without allowing it to influence candidate selection.
+18. The FastAPI service loads the complete promoted pipeline.
+19. API contract and integration tests pass.
+20. The complete lifecycle can run without paid compute infrastructure.
+21. Documentation explains DataOps, MLOps, and optional LLMOps responsibilities clearly.
 
 ## 22. Future Extensions
 
@@ -1217,7 +1155,8 @@ The following may be evaluated after version one:
 - TensorFlow models.
 - Additional LLM providers.
 - Local LLM inference.
-- Manual approval before champion promotion.
+- LangChain if provider integrations or structured-output handling become materially more complex.
+- LangGraph if workflow branching, persistence, retries, or recovery justify a graph framework.
 - Scheduled drift checks.
 - Delayed-label simulation.
 - Prediction monitoring.
@@ -1225,36 +1164,37 @@ The following may be evaluated after version one:
 - Model calibration monitoring.
 - Explainability reports.
 - Free demonstration hosting for the API.
+- Container image publication and a container registry.
 - Trivy container scanning.
 - Software bill of materials generation.
 - Kubernetes deployment as a separate learning project.
 
 These extensions must not be added until the first complete automation cycle is working.
 
-## 23. Open Decisions for Review
+## 23. Confirmed Decisions
 
-The following decisions should be confirmed before implementation begins:
+Version one uses these decisions:
 
-1. Final repository name.
-2. Python version.
-3. Exact DVC remote configuration in DagsHub.
-4. Exact GitHub Models model identifier.
-5. Initial data ranges and category values.
-6. Exact drift thresholds.
-7. Primary promotion metric.
-8. Absolute and relative promotion thresholds.
-9. Whether every selected candidate or only the best candidate is registered.
-10. Whether image publication is a separate workflow or a reusable job in the data pipeline.
-11. Whether the promoted model artifact is downloaded during the Docker build or exported earlier as a workflow artifact.
-12. Whether the first version requires manual approval before updating the `champion` alias.
+1. Repository name: `customer-churn-agentic-mlops`.
+2. Python version: `3.12`.
+3. DVC remote: DagsHub-compatible S3 remote configured with local or GitHub environment credentials.
+4. Optional LLM provider: Groq free tier by default, behind an OpenAI-compatible provider interface.
+5. Dataset ranges, categories, seeds, and drift thresholds are versioned in `params.yaml`.
+6. Primary candidate-selection and promotion metric: ROC-AUC.
+7. Absolute and relative promotion thresholds are versioned in `params.yaml`.
+8. Every candidate is tracked in MLflow, but only the deterministically selected candidate is registered.
+9. Registration and promotion are separate operations.
+10. Updating the `champion` alias requires an explicit local command or manual GitHub Actions workflow.
+11. Docker image publication and application deployment are outside version-one scope.
+12. LangChain and LangGraph are optional future tools, not required dependencies.
 
 ## 24. Final Project Definition
 
 This project combines:
 
 - DataOps for validating, curating, profiling, and versioning data.
-- MLOps for reproducible training, experiment tracking, model registration, comparison, promotion, and image publication.
+- MLOps for reproducible training, experiment tracking, model registration, comparison, promotion, and serving validation.
 - Constrained agentic experimentation for bounded LLM-generated experiment plans.
 - Basic LLMOps for structured prompts, validated outputs, provider abstraction, fallback behavior, and result traceability.
 
-The model itself is intentionally simple. The primary learning objective is the automated and auditable lifecycle from new data to a published inference image.
+The model and agent are intentionally simple. The primary learning objective is the automated and auditable lifecycle from new data through validation, versioning, training, registration, deterministic promotion, and local inference.

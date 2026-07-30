@@ -8,6 +8,7 @@ is allowed to become the serving ``champion``.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import logging
 from collections.abc import Mapping, Sequence
@@ -18,10 +19,22 @@ from typing import cast
 
 import mlflow
 import mlflow.sklearn as mlflow_sklearn
+import pandas as pd
 import yaml
 from mlflow import MlflowClient
 from mlflow.entities.model_registry import ModelVersion
 from mlflow.exceptions import MlflowException
+from src.api.model_loader import (
+    ModelLoadError,
+    PredictivePipeline,
+    predict_with_pipeline,
+)
+from src.api.schemas import ChurnPredictionRequest
+from src.data.schema import CUSTOMER_TARGET_COLUMN
+from src.data.settings import load_data_contract
+from src.data.validate import validate_dataframe
+from src.training.evaluate import CandidateMetrics, calculate_candidate_metrics
+from src.training.preprocessing import MODEL_FEATURE_COLUMNS
 from src.training.registry import (
     DEFAULT_ENV_PATH,
     DEFAULT_PARAMS_PATH,
@@ -33,6 +46,7 @@ from src.training.registry import DEFAULT_OUTPUT_PATH as DEFAULT_TRACKING_PATH
 LOGGER = logging.getLogger(__name__)
 LOG_FORMAT = "%(levelname)s %(name)s %(message)s"
 DEFAULT_PROMOTION_OUTPUT_PATH = Path("artifacts/metrics/promotion.json")
+DEFAULT_FIXED_TEST_PATH = Path("data/test/fixed_test.csv")
 CHAMPION_ALIAS = "champion"
 PROMOTION_KEYS = frozenset(
     {
@@ -93,6 +107,15 @@ class RegisteredModelFacts:
 
 
 @dataclass(frozen=True, slots=True)
+class FixedTestDataset:
+    """Validated immutable dataset used only after candidate selection."""
+
+    features: pd.DataFrame
+    target: pd.Series
+    data_version: str
+
+
+@dataclass(frozen=True, slots=True)
 class PromotionDecision:
     """Pure gate result before any alias mutation is attempted."""
 
@@ -113,6 +136,10 @@ class PromotionResult:
     reasons: tuple[str, ...]
     candidate_metrics: ModelMetrics
     champion_metrics: ModelMetrics | None
+    candidate_validation_metrics: ModelMetrics
+    champion_validation_metrics: ModelMetrics | None
+    fixed_test_data_version: str
+    api_compatible: bool
     policy: PromotionPolicy
     data_version: str | None
     git_commit: str | None
@@ -156,6 +183,7 @@ def evaluate_promotion_policy(
     policy: PromotionPolicy,
     *,
     artifact_loadable: bool,
+    api_compatible: bool,
 ) -> PromotionDecision:
     """Evaluate promotion gates without touching MLflow state."""
 
@@ -184,6 +212,11 @@ def evaluate_promotion_policy(
     else:
         reasons.append("candidate_artifact_not_loadable")
 
+    if api_compatible:
+        reasons.append("candidate_api_compatible")
+    else:
+        reasons.append("candidate_api_incompatible")
+
     if champion_metrics is None:
         reasons.append("no_champion_alias_found")
     else:
@@ -204,6 +237,7 @@ def evaluate_promotion_policy(
     passed = (
         not any("_failed" in reason for reason in reasons)
         and "candidate_artifact_not_loadable" not in reasons
+        and "candidate_api_incompatible" not in reasons
     )
     return PromotionDecision(passed=passed, reasons=tuple(reasons))
 
@@ -215,6 +249,8 @@ def compare_and_maybe_promote(
     policy: PromotionPolicy,
     tracking_path: Path,
     output_path: Path,
+    fixed_test_path: Path = DEFAULT_FIXED_TEST_PATH,
+    params_path: Path = DEFAULT_PARAMS_PATH,
     candidate_version: str | None = None,
     promote: bool = False,
 ) -> PromotionResult:
@@ -229,12 +265,20 @@ def compare_and_maybe_promote(
     )
     candidate_facts = _load_registered_model_facts(client, candidate)
     champion_facts = _load_champion_facts(client, registered_model_name)
-    artifact_loadable = _can_load_model(candidate_facts)
+    fixed_test = _load_fixed_test_dataset(fixed_test_path, params_path)
+    candidate_pipeline = _load_model_pipeline(candidate_facts)
+    candidate_metrics = _evaluate_fixed_test(candidate_pipeline, fixed_test)
+    api_compatible = _is_api_compatible(candidate_pipeline, fixed_test)
+    champion_metrics = None
+    if champion_facts is not None:
+        champion_pipeline = _load_model_pipeline(champion_facts)
+        champion_metrics = _evaluate_fixed_test(champion_pipeline, fixed_test)
     decision = evaluate_promotion_policy(
-        candidate_facts.metrics,
-        champion_facts.metrics if champion_facts is not None else None,
+        candidate_metrics,
+        champion_metrics,
         policy,
-        artifact_loadable=artifact_loadable,
+        artifact_loadable=True,
+        api_compatible=api_compatible,
     )
 
     promoted = False
@@ -273,8 +317,14 @@ def compare_and_maybe_promote(
         passed=decision.passed,
         promoted=promoted,
         reasons=tuple(reasons),
-        candidate_metrics=candidate_facts.metrics,
-        champion_metrics=champion_facts.metrics if champion_facts else None,
+        candidate_metrics=candidate_metrics,
+        champion_metrics=champion_metrics,
+        candidate_validation_metrics=candidate_facts.metrics,
+        champion_validation_metrics=(
+            champion_facts.metrics if champion_facts is not None else None
+        ),
+        fixed_test_data_version=fixed_test.data_version,
+        api_compatible=api_compatible,
         policy=policy,
         data_version=candidate_facts.data_version,
         git_commit=candidate_facts.git_commit,
@@ -376,12 +426,103 @@ def _load_champion_facts(
     )
 
 
-def _can_load_model(candidate: RegisteredModelFacts) -> bool:
+def _load_model_pipeline(candidate: RegisteredModelFacts) -> PredictivePipeline:
     try:
-        mlflow_sklearn.load_model(
+        pipeline = mlflow_sklearn.load_model(
             f"models:/{candidate.registered_model_name}/{candidate.version}"
         )
-    except Exception:
+    except Exception as error:
+        raise PromotionError(
+            "Registered model artifact cannot be loaded "
+            f"model={candidate.registered_model_name} version={candidate.version}"
+        ) from error
+    return cast(PredictivePipeline, pipeline)
+
+
+def _load_fixed_test_dataset(
+    fixed_test_path: Path,
+    params_path: Path,
+) -> FixedTestDataset:
+    if fixed_test_path.parent.name != "test":
+        raise PromotionConfigurationError(
+            "Promotion data must come from a directory named 'test'"
+        )
+    try:
+        content = fixed_test_path.read_bytes()
+        dataframe = pd.read_csv(fixed_test_path)
+    except (OSError, pd.errors.ParserError, UnicodeError) as error:
+        raise PromotionConfigurationError(
+            f"Cannot read fixed-test dataset '{fixed_test_path}': {error}"
+        ) from error
+
+    validation = validate_dataframe(
+        dataframe,
+        load_data_contract(params_path),
+        dataset_name=fixed_test_path.name,
+    )
+    if not validation.is_valid:
+        issue_codes = ", ".join(issue.code for issue in validation.issues)
+        raise PromotionConfigurationError(
+            f"Fixed-test dataset is invalid: {issue_codes}"
+        )
+    if dataframe[CUSTOMER_TARGET_COLUMN].nunique() < 2:
+        raise PromotionConfigurationError(
+            "Fixed-test dataset must contain both target classes"
+        )
+    return FixedTestDataset(
+        features=dataframe.loc[:, MODEL_FEATURE_COLUMNS],
+        target=dataframe[CUSTOMER_TARGET_COLUMN],
+        data_version=hashlib.sha256(content).hexdigest(),
+    )
+
+
+def _evaluate_fixed_test(
+    pipeline: PredictivePipeline,
+    fixed_test: FixedTestDataset,
+) -> ModelMetrics:
+    try:
+        predicted = pd.Series(
+            pipeline.predict(fixed_test.features),
+            index=fixed_test.target.index,
+        )
+        probabilities = pipeline.predict_proba(fixed_test.features)
+        if probabilities.ndim != 2 or probabilities.shape[1] != 2:
+            raise PromotionError(
+                "Fixed-test probabilities must contain two binary classes"
+            )
+        positive_probability = pd.Series(
+            probabilities[:, 1],
+            index=fixed_test.target.index,
+        )
+        metrics = calculate_candidate_metrics(
+            fixed_test.target,
+            predicted,
+            positive_probability,
+        )
+    except PromotionError:
+        raise
+    except Exception as error:
+        raise PromotionError("Cannot evaluate model on fixed-test data") from error
+    return _promotion_metrics(metrics)
+
+
+def _promotion_metrics(metrics: CandidateMetrics) -> ModelMetrics:
+    return ModelMetrics(
+        roc_auc=metrics.roc_auc,
+        f1=metrics.f1,
+        recall=metrics.recall,
+    )
+
+
+def _is_api_compatible(
+    pipeline: PredictivePipeline,
+    fixed_test: FixedTestDataset,
+) -> bool:
+    sample = fixed_test.features.iloc[0].to_dict()
+    try:
+        request = ChurnPredictionRequest.model_validate(sample)
+        predict_with_pipeline(pipeline, request)
+    except (ModelLoadError, ValueError, TypeError):
         return False
     return True
 
@@ -438,7 +579,11 @@ def _read_json(path: Path) -> dict[str, object]:
 
 def _write_promotion_result(result: PromotionResult) -> None:
     payload = {
+        "api_compatible": result.api_compatible,
         "candidate_metrics": _metrics_payload(result.candidate_metrics),
+        "candidate_validation_metrics": _metrics_payload(
+            result.candidate_validation_metrics
+        ),
         "candidate_version": result.candidate_version,
         "champion_metrics": (
             _metrics_payload(result.champion_metrics)
@@ -447,6 +592,7 @@ def _write_promotion_result(result: PromotionResult) -> None:
         ),
         "created_at_utc": result.created_at_utc,
         "data_version": result.data_version,
+        "fixed_test_data_version": result.fixed_test_data_version,
         "git_commit": result.git_commit,
         "passed": result.passed,
         "policy": {
@@ -460,6 +606,11 @@ def _write_promotion_result(result: PromotionResult) -> None:
         "reasons": list(result.reasons),
         "registered_model_name": result.registered_model_name,
         "selected_model": result.selected_model,
+        "champion_validation_metrics": (
+            _metrics_payload(result.champion_validation_metrics)
+            if result.champion_validation_metrics is not None
+            else None
+        ),
     }
     temporary_path = result.output_path.with_suffix(".json.tmp")
     try:
@@ -541,6 +692,11 @@ def _build_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument("--tracking", type=Path, default=DEFAULT_TRACKING_PATH)
     parser.add_argument("--output", type=Path, default=DEFAULT_PROMOTION_OUTPUT_PATH)
     parser.add_argument(
+        "--fixed-test",
+        type=Path,
+        default=DEFAULT_FIXED_TEST_PATH,
+    )
+    parser.add_argument(
         "--candidate-version",
         type=str,
         help="Registered model version to evaluate; defaults to tracking report.",
@@ -567,6 +723,8 @@ def main(arguments: Sequence[str] | None = None) -> int:
             policy=policy,
             tracking_path=args.tracking,
             output_path=args.output,
+            fixed_test_path=args.fixed_test,
+            params_path=args.params,
             candidate_version=args.candidate_version,
             promote=args.promote,
         )

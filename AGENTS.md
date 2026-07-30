@@ -39,7 +39,7 @@ Before making changes:
 3. Inspect the current repository tree.
 4. Inspect `pyproject.toml`, `uv.lock`, and `params.yaml` when relevant.
 5. Inspect existing tests for the affected behavior.
-6. Inspect GitHub Actions workflows when changing CI, training, registry, promotion, or publication behavior.
+6. Inspect GitHub Actions workflows when changing CI, training, registry, promotion, or remote pipeline behavior.
 
 Do not implement from a task title alone when the behavior is already defined in `SPEC.md`.
 
@@ -48,13 +48,13 @@ Do not implement from a task title alone when the behavior is already defined in
 The repository implements a one-repository learning project that combines:
 
 - DataOps: synthetic data generation, validation, curation, profiling, drift analysis, and data versioning.
-- MLOps: reproducible training, evaluation, tracking, registration, champion comparison, promotion, serving, and Docker publication.
+- MLOps: reproducible training, evaluation, tracking, registration, champion comparison, promotion, and serving validation.
 - Constrained agentic experimentation: an LLM proposes bounded experiment plans.
 - Basic LLMOps: structured prompts, validated outputs, provider abstraction, fallback behavior, and traceability.
 
 The business scenario is binary customer-churn prediction using synthetic labeled data.
 
-The main objective is the automated and auditable lifecycle from a new data batch to a published inference image. Model sophistication is secondary.
+The main objective is the automated and auditable lifecycle from a new data batch to a validated model served locally through FastAPI. Model and agent sophistication are secondary.
 
 ## Defining Principle
 
@@ -76,13 +76,13 @@ Never weaken these rules without an explicit specification change:
 8. Treat all LLM output as untrusted input.
 9. Validate LLM plans against allowlisted models, parameters, types, ranges, and resource limits.
 10. Use a deterministic fallback plan when LLM inference fails or returns an invalid plan.
-11. The LLM never selects the winner, changes thresholds, promotes a model, or publishes an image.
+11. The LLM never selects the winner, changes thresholds, or promotes a model.
 12. Candidate selection and promotion are deterministic.
-13. Failed quality, artifact-loading, API, or container checks block promotion and publication.
-14. A rejected candidate cannot move the `champion` alias or Docker `latest` tag.
+13. Failed quality, artifact-loading, fixed-test, or API compatibility checks block promotion.
+14. A rejected candidate cannot move the `champion` alias.
 15. Every promoted model is traceable to code, data, configuration, metrics, and registry metadata.
 16. Never commit or log credentials, raw datasets, or sensitive environment values.
-17. Pull-request workflows never receive registry or publishing secrets.
+17. Pull-request workflows never receive registry, DagsHub, MLflow, or LLM secrets.
 18. Version one must not require paid compute infrastructure.
 
 ## Scope Control
@@ -134,7 +134,7 @@ Owns constrained LLM behavior:
 - Deterministic plan validation.
 - Human-readable final analysis.
 
-It must not train models, execute generated code, update aliases, or publish images.
+It must not train models, execute generated code, or update registry aliases.
 
 ### `src/training/`
 
@@ -149,14 +149,13 @@ Owns deterministic ML behavior:
 - MLflow logging.
 - Model registration.
 
-Core training logic must not depend on LangChain or LangGraph.
+Core training logic must not depend on an LLM provider or workflow framework.
 
 ### `src/workflow/`
 
 Owns orchestration:
 
-- Typed LangGraph state.
-- Workflow nodes.
+- Explicit Python application services.
 - Conditional routing.
 - Local workflow entry point.
 
@@ -235,7 +234,6 @@ Use `uv` and the committed lock file.
 
 - Add dependencies only when the standard library or existing dependencies cannot reasonably solve the task.
 - Separate serving dependencies from training and development dependencies where supported.
-- Keep training-only packages out of the runtime image.
 - Never edit `uv.lock` manually.
 - Update `pyproject.toml` and `uv.lock` together through the established `uv` command.
 - Do not upgrade unrelated packages during a focused task.
@@ -351,7 +349,7 @@ Candidate runs must retain traceability to the required code, data, configuratio
 - Treat incomplete or failed comparisons as no promotion.
 - Include artifact loading and API integration checks in the gate.
 
-## LLM, LangChain, and LangGraph Rules
+## LLM and Workflow Rules
 
 The LLM integration must be optional and replaceable.
 
@@ -366,16 +364,16 @@ The LLM integration must be optional and replaceable.
 - Verify model names, parameters, counts, and metrics independently.
 - Build final analysis only from verified pipeline outputs.
 
-The LLM must not generate content for automatic execution, including Python code, shell commands, package installations, arbitrary paths, registry actions, or deployment actions.
+The LLM must not generate content for automatic execution, including Python code, shell commands, package installations, arbitrary paths, or registry actions.
 
-LangGraph nodes must be small, typed, and testable. Routing logic belongs in deterministic conditions, not prompts.
+Workflow operations must be small, typed, and testable. Routing logic belongs in deterministic Python conditions, not prompts. LangChain and LangGraph are optional future tools and must not be introduced unless they remove demonstrated complexity.
 
 Required paths must remain possible and testable:
 
 - Invalid data stops before curation.
 - No significant drift can stop without training.
 - LLM failure reaches fallback training.
-- Rejected candidates cannot reach publication.
+- Rejected candidates cannot become champion.
 - Final analysis cannot modify the promotion result.
 
 ## FastAPI Rules
@@ -390,20 +388,14 @@ Follow the endpoint contracts in `SPEC.md`.
 - Return class, probability when supported, and served model version.
 - Keep business logic outside endpoint functions.
 - Never call the LLM during prediction.
-- Never require training datasets in the runtime image.
 
-## Docker Rules
+## Optional Local Docker
 
-The serving image must be minimal and reproducible.
+The existing Dockerfile is a local-development convenience, not a version-one delivery artifact.
 
-- Use the repository's selected pinned base image policy.
-- Install only runtime dependencies.
-- Copy only runtime code and the exact promoted serving artifact.
-- Use a non-root user where practical.
 - Never bake credentials into image layers.
-- Exclude Git metadata, raw data, tests, reports, environments, and training caches through `.dockerignore`.
-- Run health and prediction smoke tests before push.
-- Move `latest` only after all required gates pass.
+- Keep raw data, reports, tests, local environments, and secrets out of the build context.
+- Do not add image publication or deployment workflows unless `SPEC.md` changes explicitly.
 
 ## GitHub Actions Rules
 
@@ -411,9 +403,9 @@ Use least privilege and explicit permissions.
 
 ### CI
 
-- Run linting, formatting verification, tests, contract checks, and Docker build verification.
-- Do not register, promote, or publish models.
-- Do not expose publishing secrets to pull requests.
+- Run linting, formatting verification, tests, and contract checks.
+- Do not register or promote models.
+- Do not expose external integration secrets to pull requests.
 
 ### Data pipeline
 
@@ -421,20 +413,19 @@ Use least privilege and explicit permissions.
 - Support manual execution.
 - Publish reports and traceability artifacts.
 - Use fallback when the LLM is unavailable or invalid.
-- Trigger publication only after promotion.
 
-### Image publication
+### Promotion
 
-- Resolve the exact promoted model version.
-- Build and smoke-test the runtime image.
-- Publish immutable model-version and Git-SHA tags.
-- Move `latest` only after successful tests.
+- Keep promotion in a separate manually triggered workflow.
+- Resolve the exact registered model version.
+- Re-run fixed-test, artifact-loading, policy, and API compatibility gates.
+- Move `champion` only after every gate passes.
 
 General workflow rules:
 
 - Pin action versions according to repository policy.
 - Avoid printing secrets or full datasets.
-- Use concurrency controls where duplicate publishing is possible.
+- Use concurrency controls where duplicate remote operations are possible.
 - Prefer Makefile targets or project scripts over duplicated shell logic.
 
 ## Testing Requirements
@@ -454,7 +445,7 @@ Use unit tests for deterministic logic such as:
 - Promotion policy.
 - API schemas and metadata formatting.
 
-Unit tests must not require network access. Mock or fake LLM providers, remote MLflow/DagsHub, Docker Hub, and GitHub APIs.
+Unit tests must not require network access. Mock or fake LLM providers, remote MLflow/DagsHub, and GitHub APIs.
 
 ### Integration tests
 
@@ -485,7 +476,7 @@ Verify:
 - Avoid timing-dependent and order-dependent assertions.
 - Keep fixtures small.
 - Assert failure reasons, not only boolean outcomes.
-- Test safeguards and negative paths around validation, fallback, promotion, and publication.
+- Test safeguards and negative paths around validation, fallback, registration, and promotion.
 
 ## Commands and Tooling
 

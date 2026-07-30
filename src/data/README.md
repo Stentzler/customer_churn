@@ -104,8 +104,8 @@ content hashes in `dvc.lock`.
 ## Data Contract
 
 The customer-churn contract is defined by versioned values in
-[`params.yaml`](../params.yaml) and translated into executable Pandera checks by
-[`src/data/schema.py`](../src/data/schema.py).
+[`params.yaml`](../../params.yaml) and translated into executable Pandera checks by
+[`src/data/schema.py`](./schema.py).
 
 ### Column Schema
 
@@ -187,7 +187,7 @@ A customer cannot have subscription tenure from before age 18.
 
 ### Configuration Validation
 
-[`src/data/settings.py`](../src/data/settings.py) treats `params.yaml` as an
+[`src/data/settings.py`](./settings.py) treats `params.yaml` as an
 untrusted external boundary. It validates:
 
 - Required and unexpected configuration fields.
@@ -207,7 +207,7 @@ after loading.
 ## Synthetic Data Generation
 
 Generation is implemented in
-[`src/data/generate.py`](../src/data/generate.py).
+[`src/data/generate.py`](./generate.py).
 
 ### Why Generation Exists
 
@@ -356,10 +356,10 @@ Validation is divided into four modules:
 
 | Module | Responsibility |
 |---|---|
-| [`schema.py`](../src/data/schema.py) | Builds executable Pandera checks |
-| [`validate.py`](../src/data/validate.py) | Runs validation and normalizes Pandera failures |
-| [`validation_models.py`](../src/data/validation_models.py) | Defines stable immutable result models |
-| [`validation_report.py`](../src/data/validation_report.py) | Renders JSON and Markdown artifacts |
+| [`schema.py`](./schema.py) | Builds executable Pandera checks |
+| [`validate.py`](./validate.py) | Runs validation and normalizes Pandera failures |
+| [`validation_models.py`](./validation_models.py) | Defines stable immutable result models |
+| [`validation_report.py`](./validation_report.py) | Renders JSON and Markdown artifacts |
 
 ### Lazy Validation
 
@@ -429,7 +429,7 @@ Exit codes:
 ## Incoming Batch Routing
 
 Routing is implemented in
-[`src/data/ingest.py`](../src/data/ingest.py).
+[`src/data/ingest.py`](./ingest.py).
 
 The ingestion boundary:
 
@@ -479,7 +479,7 @@ successful path.
 ## Drift Detection
 
 Drift detection is implemented in
-[`src/data/drift.py`](../src/data/drift.py) using Evidently.
+[`src/data/drift.py`](./drift.py) using Evidently.
 
 ### Comparison Policy
 
@@ -633,7 +633,7 @@ Detected drift is a result, not an operational error. It does not use exit code 
 ## Curation
 
 Curation is implemented in
-[`src/data/curate.py`](../src/data/curate.py).
+[`src/data/curate.py`](./curate.py).
 
 The curated training dataset is rebuilt from:
 
@@ -703,7 +703,7 @@ The successful result logs:
 ## Dataset Profiling
 
 Profiling is implemented in
-[`src/data/profile.py`](../src/data/profile.py).
+[`src/data/profile.py`](./profile.py).
 
 It validates the input CSV, computes aggregate statistics, and writes:
 
@@ -780,6 +780,9 @@ curated training data
 validation reports
 profile reports
 drift reports
+model artifacts
+training metrics
+experiment plans and planner traces
 ```
 
 The actual output contents are cached locally under `.dvc/cache/`. Git sees the
@@ -789,7 +792,7 @@ pipeline definition and hashes, not the large generated files.
 
 #### `dvc.yaml`
 
-[`dvc.yaml`](../dvc.yaml) is the pipeline recipe. Every stage declares:
+[`dvc.yaml`](../../dvc.yaml) is the pipeline recipe. Every stage declares:
 
 - `cmd`: command DVC executes.
 - `deps`: files whose content can invalidate the stage.
@@ -798,7 +801,7 @@ pipeline definition and hashes, not the large generated files.
 
 #### `dvc.lock`
 
-[`dvc.lock`](../dvc.lock) is the resolved execution record. It contains:
+[`dvc.lock`](../../dvc.lock) is the resolved execution record. It contains:
 
 - Exact command used by each stage.
 - Dependency content hashes and sizes.
@@ -816,24 +819,27 @@ object. The cache is local and ignored by Git.
 
 #### `.dvc/config`
 
-The committed project configuration currently disables DVC analytics:
+The committed project configuration disables DVC analytics and declares the
+DagsHub remote:
 
 ```ini
 [core]
     analytics = false
+    remote = origin
 ```
 
-No remote is configured yet.
+The remote endpoint is non-secret project metadata. Authentication never belongs
+in this committed file.
 
 #### `.dvc/config.local`
 
-This ignored file is where machine-specific settings and future DagsHub credentials
-belong. Secrets must never be committed in `.dvc/config`, `params.yaml`, or source
-code.
+This ignored file is where machine-specific DagsHub credentials belong. GitHub
+Actions writes the same settings locally from encrypted secrets. Secrets must
+never be committed in `.dvc/config`, `params.yaml`, or source code.
 
 ### Current DAG
 
-The pipeline has seven successful stages:
+The reproducible DVC graph has nine successful stages:
 
 ```text
 generate
@@ -843,6 +849,10 @@ generate
   |                        +--> curate --> profile
   |                        |
   +--> validate_drifted ---+--> drift_drifted
+
+fallback_plan -------------------------+
+                                      |
+curate -----------------------------> train
 ```
 
 Stage details:
@@ -856,6 +866,12 @@ Stage details:
 | `drift_drifted` | Reference and accepted drifted CSV | Drifted JSON and HTML drift reports |
 | `curate` | Reference, accepted normal, accepted drifted | Curated training CSV |
 | `profile` | Curated training CSV | Aggregate training profile JSON |
+| `fallback_plan` | Prompt, catalog, schemas, and experiment policy | Approved plan and planner trace |
+| `train` | Curated data and approved plan | Candidate pipelines, metrics, and selection |
+
+The final agent analysis is intentionally outside this static graph. The
+operational workflow writes it only after MLflow registration and deterministic
+promotion comparison, which are remote and run-specific operations.
 
 The invalid scenario is generated but is not a default successful DVC stage.
 Processing it correctly returns exit code `1`, which would stop `dvc repro`.
@@ -993,7 +1009,7 @@ make install
 uv run dvc pull
 ```
 
-Credentials are stored locally or in future CI secrets, never committed. Publish
+Credentials are stored locally or in GitHub encrypted secrets, never committed. Publish
 new cache objects with `uv run dvc push`; restore them on another machine with
 `uv run dvc pull`.
 
@@ -1065,18 +1081,30 @@ The local orchestrator performs these operations in order:
 4. Compare an accepted batch with the reference data and persist drift reports.
 5. Run `dvc add` for the raw batch, accepted copy, validation reports, and drift
    reports. Their `.dvc` files are metadata that should be committed to Git.
-6. Run `dvc repro profile train`. The `curate` stage depends on the complete
+6. Stop after report persistence when `feature_drift.is_significant` is false,
+   unless a human supplied the explicit retraining override.
+7. Reproduce `profile`, force the `fallback_plan` stage so current optional LLM
+   settings are evaluated, and then reproduce `train`. The `curate` stage depends
+   on the complete
    `data/accepted/` directory, so a new accepted filename invalidates curation,
    profiling, and training.
-7. Compare the profile's curated `data_version` with the last successful MLflow
+8. Compare the profile's curated `data_version` with the last successful MLflow
    tracking receipt.
-8. Skip remote registration when the effective curated data is unchanged.
-9. Otherwise, track both candidates and register the selected candidate in DagsHub.
+9. Skip remote registration when the effective curated data is unchanged.
+10. Otherwise, track both candidates, register the selected candidate, compare
+    that exact version with the champion, and create the final analysis report.
 
-For this study workflow, every valid batch that changes the curated dataset causes
-retraining. Feature and target drift remain separate, recorded evidence; they do
-not block this manual local demonstration. A future automated policy can use the
-structured `feature_drift.is_significant` decision to skip normal batches.
+Feature and target drift remain separate. Only significant **feature** drift
+automatically opens the training path; target drift remains recorded evidence and
+does not independently trigger retraining. To demonstrate the complete lifecycle
+with a valid low-drift batch, use:
+
+```bash
+make pipeline INPUT=data/incoming/batch-001.csv FORCE_RETRAIN=1
+```
+
+The `make acceptance-local` study command applies this override internally so it
+always rehearses training, registration, comparison, and final reporting.
 
 Use a unique, immutable delivery filename such as a timestamp or source batch ID:
 
@@ -1242,20 +1270,20 @@ uv lock --check
 
 | File | Purpose |
 |---|---|
-| [`src/data/settings.py`](../src/data/settings.py) | Typed versioned configuration loading |
-| [`src/data/generate.py`](../src/data/generate.py) | Synthetic scenario generation and CSV persistence |
-| [`src/data/schema.py`](../src/data/schema.py) | Pandera schema and business rules |
-| [`src/data/validate.py`](../src/data/validate.py) | Validation execution and failure normalization |
-| [`src/data/validation_models.py`](../src/data/validation_models.py) | Immutable validation contracts |
-| [`src/data/validation_report.py`](../src/data/validation_report.py) | JSON and Markdown validation reports |
-| [`src/data/ingest.py`](../src/data/ingest.py) | Incoming validation and accepted/rejected routing |
-| [`src/data/drift.py`](../src/data/drift.py) | Evidently adapter and stable drift decisions |
-| [`src/data/curate.py`](../src/data/curate.py) | Deterministic training-data curation |
-| [`src/data/profile.py`](../src/data/profile.py) | Aggregate dataset profile |
-| [`params.yaml`](../params.yaml) | Versioned policy and thresholds |
-| [`dvc.yaml`](../dvc.yaml) | DataOps DAG definition |
-| [`dvc.lock`](../dvc.lock) | Exact pipeline dependency and output versions |
-| [`Makefile`](../Makefile) | Repeatable developer commands |
+| [`src/data/settings.py`](./settings.py) | Typed versioned configuration loading |
+| [`src/data/generate.py`](./generate.py) | Synthetic scenario generation and CSV persistence |
+| [`src/data/schema.py`](./schema.py) | Pandera schema and business rules |
+| [`src/data/validate.py`](./validate.py) | Validation execution and failure normalization |
+| [`src/data/validation_models.py`](./validation_models.py) | Immutable validation contracts |
+| [`src/data/validation_report.py`](./validation_report.py) | JSON and Markdown validation reports |
+| [`src/data/ingest.py`](./ingest.py) | Incoming validation and accepted/rejected routing |
+| [`src/data/drift.py`](./drift.py) | Evidently adapter and stable drift decisions |
+| [`src/data/curate.py`](./curate.py) | Deterministic training-data curation |
+| [`src/data/profile.py`](./profile.py) | Aggregate dataset profile |
+| [`params.yaml`](../../params.yaml) | Versioned policy and thresholds |
+| [`dvc.yaml`](../../dvc.yaml) | DataOps DAG definition |
+| [`dvc.lock`](../../dvc.lock) | Exact pipeline dependency and output versions |
+| [`Makefile`](../../Makefile) | Repeatable developer commands |
 
 ## Current Boundaries
 

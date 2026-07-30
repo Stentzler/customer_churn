@@ -136,13 +136,32 @@ class ChampionModelService(metaclass=SingletonMeta):
 
         if self._pipeline is None:
             raise ModelLoadError("Model pipeline is unavailable before startup load")
-        features = pd.DataFrame([request.model_dump()], columns=MODEL_FEATURE_COLUMNS)
-        predicted_class = int(self._pipeline.predict(features)[0])
-        probability = _predict_churn_probability(self._pipeline, features)
-        return Prediction(
-            predicted_class=predicted_class,
-            churn_probability=probability,
-        )
+        return predict_with_pipeline(self._pipeline, request)
+
+
+def predict_with_pipeline(
+    pipeline: PredictivePipeline,
+    request: ChurnPredictionRequest,
+) -> Prediction:
+    """Validate the serving output produced by one complete model pipeline."""
+
+    features = pd.DataFrame([request.model_dump()], columns=MODEL_FEATURE_COLUMNS)
+    try:
+        predicted_values = np.asarray(pipeline.predict(features))
+        if predicted_values.shape != (1,):
+            raise ModelLoadError("Model prediction must contain exactly one class")
+        predicted_class = int(predicted_values[0])
+        if predicted_class not in {0, 1}:
+            raise ModelLoadError("Model prediction must be binary")
+        probability = _predict_churn_probability(pipeline, features)
+    except ModelLoadError:
+        raise
+    except Exception as error:
+        raise ModelLoadError("Model pipeline failed the serving contract") from error
+    return Prediction(
+        predicted_class=predicted_class,
+        churn_probability=probability,
+    )
 
 
 def _load_model_version(settings: ApiSettings):
@@ -188,5 +207,10 @@ def _predict_churn_probability(
 ) -> float | None:
     if not hasattr(pipeline, "predict_proba"):
         return None
-    probabilities = pipeline.predict_proba(features)
-    return float(probabilities[0][1])
+    probabilities = np.asarray(pipeline.predict_proba(features), dtype=float)
+    if probabilities.shape != (1, 2):
+        raise ModelLoadError("Model probabilities must contain two binary classes")
+    probability = float(probabilities[0, 1])
+    if not np.isfinite(probability) or not 0.0 <= probability <= 1.0:
+        raise ModelLoadError("Churn probability must be finite and between 0 and 1")
+    return probability

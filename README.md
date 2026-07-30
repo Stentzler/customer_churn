@@ -4,15 +4,76 @@ A learning project for an automated and auditable customer-churn lifecycle spann
 DataOps, MLOps, and constrained LLMOps.
 
 The project is being implemented incrementally according to [SPEC.md](./SPEC.md).
-The current implementation includes the repository foundation, deterministic
-synthetic-data scenarios, and data-contract validation.
+The current implementation demonstrates the main local and GitHub-driven
+operational cycle: deterministic DataOps, candidate training, MLflow/DagsHub
+registration, controlled promotion, FastAPI serving, and optional constrained
+agent assistance.
 
 Detailed subsystem documentation:
 
-- [DataOps guide](./data/README.md)
+- [DataOps guide](./src/data/README.md)
 - [Training and MLflow guide](./src/training/README.md)
 - [FastAPI serving guide](./src/api/README.md)
 - [Agent and LLMOps guide](./src/agent/README.md)
+
+## Current Lifecycle
+
+The project is organized as an auditable lifecycle rather than only a model
+training script:
+
+```text
+new CSV
+  |
+  v
+validate contract
+  |
+  v
+accept or reject
+  |
+  v
+feature and target drift reports
+  |
+  +-- no significant feature drift --> persist reports and stop
+  |
+  +-- significant drift or manual force
+  |
+  v
+curate and profile training dataset
+  |
+  v
+optional LLM experiment plan
+  |
+  v
+deterministic candidate training and selection
+  |
+  v
+MLflow/DagsHub registration
+  |
+  v
+fixed-test and API-compatible comparison
+  |
+  +-- candidate passes --> eligible for manual promotion
+  |
+  v
+manual deterministic promotion to champion
+  |
+  v
+FastAPI serves models:/customer-churn@champion
+```
+
+The important rule is that the LLM never owns operational decisions. It can
+propose bounded experiments and write an analysis report, but deterministic code
+validates data, validates the plan, trains candidates, selects the winner,
+registers the model, and checks promotion gates.
+
+Use these guides for subsystem-level details:
+
+| Area | Guide |
+|---|---|
+| Data generation, validation, curation, profiling, drift, and DVC | [DataOps guide](./src/data/README.md) |
+| Training, model artifacts, metrics, selection, MLflow, and promotion | [Training guide](./src/training/README.md) |
+| Optional LLM planning and analysis | [Agent guide](./src/agent/README.md) |
+| Local model serving | [FastAPI guide](./src/api/README.md) |
 
 ## Development
 
@@ -98,10 +159,20 @@ Run one newly delivered CSV through the complete local lifecycle:
 make pipeline INPUT=data/incoming/batch-001.csv
 ```
 
-The command validates and routes the batch, creates drift reports, versions the
-batch artifacts in the local DVC cache, reproduces curation through training, and
-creates an agent analysis report before registering the selected candidate in
-DagsHub. Invalid data stops before curation.
+The command validates and routes the batch, creates drift reports, and versions
+the batch artifacts in the local DVC cache. Significant feature drift continues
+through curation, profiling, bounded experiment planning, training, DagsHub
+registration, fixed-test comparison, and final agent analysis. Invalid data stops
+before curation, and valid data without significant feature drift stops after its
+reports are persisted.
+
+Use the explicit override only when a human intentionally wants to retrain despite
+the drift result:
+
+```bash
+make pipeline INPUT=data/incoming/batch-001.csv FORCE_RETRAIN=1
+```
+
 When the resulting curated `data_version` was already registered by the previous
 successful execution, remote tracking is skipped to avoid duplicate model versions.
 
@@ -111,10 +182,10 @@ This repository uses four different systems together:
 
 | System | What it stores | What it is used for |
 |---|---|---|
-| Git / GitHub | Source code, configs, tests, docs, `dvc.yaml`, `dvc.lock`, and small `.dvc` pointer files | Code review, history, collaboration, and future GitHub Actions automation |
+| Git / GitHub | Source code, configs, tests, docs, `dvc.yaml`, `dvc.lock`, and small `.dvc` pointer files | Code review, history, collaboration, and GitHub Actions automation |
 | DVC | Real generated datasets, reports, profiles, and model artifacts in `.dvc/cache/` or the DagsHub DVC remote | Versioning large or generated files without committing them directly to Git |
 | MLflow | Experiment runs, metrics, parameters, artifacts, and registered model versions | Tracking what was trained and keeping model lineage |
-| DagsHub | Hosts the Git repository, DVC remote storage, and MLflow tracking/registry | One place to inspect code, data versions, experiment runs, and registered models |
+| DagsHub | Provides DVC remote storage and MLflow tracking/registry linked to the project | One place to inspect data versions, experiment runs, and registered models |
 
 The fastest way to simulate a new delivery is to let the project create a fresh
 valid CSV and run the same local lifecycle that GitHub Actions will use later:
@@ -125,8 +196,14 @@ make acceptance-local
 
 This creates a new file under `data/incoming/`, validates it, versions the batch
 artifacts with DVC, rebuilds the curated training dataset, profiles the data,
-trains candidates, and registers the selected model in a local SQLite MLflow
-backend under `.tmp/`. It does not contact DagsHub.
+trains candidates, registers the selected model in a local SQLite MLflow backend,
+compares that version, and writes the final agent report. It deliberately forces
+retraining so the acceptance command always exercises the full lifecycle. It does
+not contact DagsHub.
+
+Use this command when you want a complete local rehearsal without remote writes.
+It is useful for studying the behavior because it leaves the generated DVC
+metadata, reports, metrics, selected model artifact, and agent analysis on disk.
 
 After this command, Git will usually show new files like:
 
@@ -174,15 +251,29 @@ The agent analysis report is written to `artifacts/agent/agent-analysis.md`. It
 explains which plan was used, whether fallback was used, which experiments were
 approved, and what deterministic training selected.
 
-After model registration, promotion comparison can be run locally:
+When `LLM_ENABLED=false`, the report still exists, but the plan source is the
+deterministic fallback. When `LLM_ENABLED=true`, the planner calls the configured
+OpenAI-compatible provider, validates the response, and still falls back safely if
+the provider fails or proposes something outside policy.
+
+The operational pipeline automatically compares the exact version it just
+registered and writes:
+
+```text
+artifacts/metrics/promotion.json
+```
+
+`candidate_validation_metrics` records the held-out validation metrics used to
+select the candidate during training. `candidate_metrics` records a fresh
+evaluation on `data/test/fixed_test.csv`; these fixed-test values, artifact
+loadability, API request compatibility, and comparison with the current champion
+control promotion eligibility.
+
+The comparison can also be rerun without moving the alias:
 
 ```bash
 make compare-model
 ```
-
-This writes `artifacts/metrics/promotion.json`. It checks the selected registered
-candidate against the configured thresholds and the current MLflow `champion`
-alias, but it does not move the alias.
 
 To manually promote a candidate after reviewing the report:
 
@@ -233,6 +324,19 @@ candidate run IDs, Git commit, and data version. In DagsHub, use the MLflow
 experiment page to inspect candidate runs, metrics, logged artifacts, and the
 registered model version.
 
+To know whether the model was trained again, inspect:
+
+```bash
+cat artifacts/metrics/selection.json
+cat artifacts/metrics/mlflow-tracking.json
+```
+
+`selection.json` shows the winning candidate and metrics for the current run.
+`mlflow-tracking.json` shows whether that selected model was registered, including
+the DagsHub MLflow run IDs and registered model version when remote tracking was
+enabled. If the current curated `data_version` was already registered before, the
+local workflow skips duplicate remote registration.
+
 To confirm DVC remote storage is synchronized:
 
 ```bash
@@ -247,8 +351,10 @@ uv run dvc push -r origin
 
 ## GitHub Actions Data Pipeline
 
-The future automated version of the local command lives in
-`.github/workflows/data-pipeline.yml`.
+The automated version of the local command lives in
+`.github/workflows/data-pipeline.yml`. It is intentionally split into jobs so the
+GitHub UI shows where the run is: input detection, quality gates, pipeline
+execution, and metadata commit.
 
 It can be triggered in two ways:
 
@@ -280,7 +386,8 @@ git commit -m "Add incoming customer batch"
 git push
 ```
 
-Then run the workflow manually and use:
+The push can trigger the workflow automatically on `main`. You can also run the
+workflow manually and use:
 
 ```text
 data/incoming/my-new-batch.csv
@@ -292,16 +399,35 @@ The workflow is split into clear jobs:
 |---|---|
 | `detect-input` | Finds the incoming CSV. Automatic runs require exactly one changed CSV under `data/incoming/`. |
 | `quality` | Installs the locked environment, runs linting, and runs the test suite. |
-| `run-pipeline` | Uses the `prod` GitHub environment, pulls DVC data, validates the batch, curates data, trains models, registers the selected model in DagsHub MLflow, pushes DVC data, and uploads reports. |
+| `run-pipeline` | Uses the `prod` GitHub environment, pulls DVC data, validates and checks drift, conditionally trains, registers and compares the selected model, pushes DVC data, and uploads reports. |
 | `commit-metadata` | Commits only Git/DVC metadata back to the branch: `dvc.lock` and `.dvc` pointer files. |
 
 The data pipeline compares the registered candidate automatically and uploads
 `promotion.json`, but it does not move the `champion` alias.
+For a manual workflow run, select `force_retrain=true` only when you intend to
+override the normal no-significant-drift stop.
+
+The uploaded `pipeline-reports` artifact contains the generated inspection
+outputs:
+
+```text
+reports/data-quality/
+reports/data-profile/
+reports/drift/
+artifacts/metrics/
+artifacts/experiment-plans/
+artifacts/agent/
+```
+
+This is where you inspect validation results, drift decisions, training metrics,
+MLflow tracking receipts, the LLM or fallback experiment plan, and the agent
+analysis report for that run.
 
 Manual champion promotion lives in `.github/workflows/promote-model.yml`. Run it
 from the GitHub Actions UI with the registered model version you want to promote.
-That workflow re-checks the gates and moves the MLflow `champion` alias only if
-the candidate still passes.
+That workflow pulls the immutable fixed-test data from DVC, reloads the requested
+registry artifact, re-checks fixed-test thresholds and FastAPI compatibility, and
+moves the MLflow `champion` alias only if the candidate still passes.
 
 The workflow uses GitHub Secrets instead of `.env`:
 
@@ -312,11 +438,33 @@ DAGSHUB_REPOSITORY
 MLFLOW_TRACKING_URI
 MLFLOW_TRACKING_USERNAME
 MLFLOW_TRACKING_PASSWORD
+LLM_ENABLED
+LLM_PROVIDER
+LLM_MODEL
+LLM_API_KEY
+LLM_BASE_URL
+LLM_TIMEOUT_SECONDS
+LLM_TEMPERATURE
+LLM_MAX_TOKENS
 ```
 
 In GitHub Actions, GitHub stores the code and DVC metadata. DagsHub DVC storage
 stores the real generated datasets and reports. DagsHub MLflow stores the
 experiment runs, metrics, artifacts, and registered model version.
+The LLM variables are optional from a pipeline-safety perspective: when the LLM
+provider is missing, unavailable, or returns an invalid plan, the workflow writes
+the fallback plan and continues deterministically.
+
+In this setup, the repositories have different responsibilities:
+
+| Repository or service | Main responsibility |
+|---|---|
+| GitHub | Stores source code, tests, workflow files, configuration, and DVC pointer metadata, and executes the automation. |
+| DagsHub DVC remote | Stores the real DVC-managed data and report files that Git should not store directly. |
+| DagsHub MLflow | Stores experiment runs, metrics, parameters, model artifacts, registered model versions, and the `champion` alias. |
+
+This split is common in MLOps because source code history and data/model artifact
+history have different sizes, access patterns, and review needs.
 
 You can still process a manually supplied CSV:
 
@@ -348,8 +496,12 @@ Evidently drift report
         v
 DVC add raw, accepted, validation, and drift artifacts
         |
-        v
-DVC repro profile + train
+        +-- no significant feature drift --> stop
+        |
+        +-- significant drift or FORCE_RETRAIN=1
+                    |
+                    v
+DVC repro profile + current plan + train
         |
         v
 Curated training data + data profile + model artifacts
@@ -359,6 +511,12 @@ If curated data version changed
         |
         v
 MLflow candidate runs + selected model registration
+        |
+        v
+Fixed-test + API compatibility comparison
+        |
+        v
+Agent analysis from verified current-run artifacts
         |
         v
 Optional: DVC push to DagsHub remote storage
@@ -391,12 +549,13 @@ GET  /model-info
 POST /predict
 ```
 
-Build and run the local Docker image:
+An optional local-only Docker rehearsal remains available:
 
 ```bash
 make docker-build
 make docker-run
 ```
 
-Docker Hub is not needed for the current local serving test. The container reads
-credentials from `.env` at runtime and does not bake them into the image.
+Container publication and deployment are outside this project's version-one
+scope. The local container reads credentials from `.env` at runtime and does not
+bake them into the image.

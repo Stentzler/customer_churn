@@ -15,7 +15,6 @@ DEFAULT_PLAN_PATH = Path("artifacts/experiment-plans/fallback.json")
 DEFAULT_TRACE_PATH = Path("artifacts/agent/planner-trace.json")
 DEFAULT_PROFILE_PATH = Path("reports/data-profile/training.profile.json")
 DEFAULT_METRICS_DIRECTORY = Path("artifacts/metrics")
-DEFAULT_PROMOTION_PATH = Path("artifacts/metrics/promotion.json")
 DEFAULT_OUTPUT_PATH = Path("artifacts/agent/agent-analysis.md")
 
 
@@ -29,7 +28,7 @@ def write_agent_analysis(
     trace_path: Path = DEFAULT_TRACE_PATH,
     profile_path: Path = DEFAULT_PROFILE_PATH,
     metrics_directory: Path = DEFAULT_METRICS_DIRECTORY,
-    promotion_path: Path = DEFAULT_PROMOTION_PATH,
+    promotion_path: Path | None = None,
     output_path: Path = DEFAULT_OUTPUT_PATH,
 ) -> Path:
     """Create a Markdown report from verified machine-readable artifacts."""
@@ -38,7 +37,9 @@ def write_agent_analysis(
     selection = _read_required_json(metrics_directory / "selection.json")
     profile = _read_optional_json(profile_path)
     trace = _read_optional_json(trace_path)
-    promotion = _read_optional_json(promotion_path)
+    promotion = (
+        _read_optional_json(promotion_path) if promotion_path is not None else None
+    )
     candidate_metrics = _read_candidate_metrics(metrics_directory)
     content = build_agent_analysis_markdown(
         plan=plan,
@@ -319,7 +320,7 @@ def main(arguments: Sequence[str] | None = None) -> int:
     parser.add_argument("--trace", type=Path, default=DEFAULT_TRACE_PATH)
     parser.add_argument("--profile", type=Path, default=DEFAULT_PROFILE_PATH)
     parser.add_argument("--metrics-dir", type=Path, default=DEFAULT_METRICS_DIRECTORY)
-    parser.add_argument("--promotion", type=Path, default=DEFAULT_PROMOTION_PATH)
+    parser.add_argument("--promotion", type=Path)
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT_PATH)
     args = parser.parse_args(arguments)
     configure_logging()

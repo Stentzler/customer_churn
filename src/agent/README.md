@@ -3,8 +3,8 @@
 This directory owns the constrained LLM behavior for the project.
 
 The agent does not train models, validate data, promote models, execute code, or
-run shell commands. Its role is limited to proposing bounded experiment plans and,
-later, generating human-readable analysis from verified artifacts.
+run shell commands. Its role is limited to proposing bounded experiment plans and
+generating human-readable analysis from verified artifacts.
 
 The project rule is:
 
@@ -87,7 +87,7 @@ LLM_ENABLED=false
 
 the output plan is deterministic fallback.
 
-Generate the human-readable analysis report after training metrics exist:
+Generate a standalone human-readable analysis report after training metrics exist:
 
 ```bash
 make agent-analysis
@@ -101,7 +101,14 @@ artifacts/agent/agent-analysis.md
 
 The Markdown report is for human inspection. It summarizes the plan source,
 fallback decision, proposed experiments, validation status, selected model,
-candidate metrics, and promotion result when available.
+candidate metrics, and promotion result when one is explicitly supplied:
+
+```bash
+make agent-analysis PROMOTION=artifacts/metrics/promotion.json
+```
+
+The optional argument is deliberate. A standalone report must not silently read a
+stale promotion file from an older model version.
 
 ## How This Connects To Training
 
@@ -134,8 +141,20 @@ deterministic pipeline. It depends on:
 That means changing the prompt, schema, catalog, or experiment policy causes DVC
 to know the plan artifact may need to be regenerated.
 
-The `agent_analysis` DVC stage runs after training and produces the Markdown
-report from verified JSON artifacts. It does not influence training, model
+The final analysis is not a DVC stage. Registration and comparison are remote,
+run-specific operations, so placing the final report in the static DVC graph
+would either omit the current promotion result or leave a DVC output modified
+after reproduction.
+
+The operational `make pipeline` path has stronger ordering:
+
+```text
+train -> register exact selected version -> deterministic comparison
+      -> agent analysis using that comparison artifact
+```
+
+This guarantees that the final report describes the current registered candidate,
+not an earlier local report. The analysis remains read-only and cannot influence
 selection, registration, or promotion.
 
 ## Secret Handling
@@ -155,6 +174,8 @@ LLM_MAX_TOKENS=1200
 
 `LLM_API_KEY` is sensitive and must not be committed. `.env.example` only stores
 variable names and safe defaults.
+In GitHub Actions, configure the same `LLM_*` names as encrypted environment
+secrets instead of committing a `.env` file.
 
 The prompt and planner must never include raw customer rows, credentials, shell
 commands, package installation instructions, or arbitrary file paths.

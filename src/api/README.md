@@ -141,6 +141,6 @@ make docker-run
 The Docker command passes `.env` into the container at runtime. Credentials are
 not copied into the image layers.
 
-The image is intentionally local-only for now. Publishing to Docker Hub becomes
-useful when we add the later publication workflow, but it is not needed to test
-the serving layer on your machine.
+The image is intentionally local-only. Container publication and deployment are
+outside the version-one project scope; the Dockerfile exists only to rehearse the
+serving runtime on your machine.

@@ -7,6 +7,11 @@ on:
         description: "Incoming CSV to process, for example data/incoming/batch.csv"
         required: true
         type: string
+      force_retrain:
+        description: "Train even when feature drift is not significant"
+        required: false
+        default: false
+        type: boolean
   push:
     branches:
       - main
@@ -136,6 +141,14 @@ jobs:
       MLFLOW_TRACKING_URI: ${{ secrets.MLFLOW_TRACKING_URI }}
       MLFLOW_TRACKING_USERNAME: ${{ secrets.MLFLOW_TRACKING_USERNAME }}
       MLFLOW_TRACKING_PASSWORD: ${{ secrets.MLFLOW_TRACKING_PASSWORD }}
+      LLM_ENABLED: ${{ secrets.LLM_ENABLED }}
+      LLM_PROVIDER: ${{ secrets.LLM_PROVIDER }}
+      LLM_MODEL: ${{ secrets.LLM_MODEL }}
+      LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+      LLM_BASE_URL: ${{ secrets.LLM_BASE_URL }}
+      LLM_TIMEOUT_SECONDS: ${{ secrets.LLM_TIMEOUT_SECONDS }}
+      LLM_TEMPERATURE: ${{ secrets.LLM_TEMPERATURE }}
+      LLM_MAX_TOKENS: ${{ secrets.LLM_MAX_TOKENS }}
 
     steps:
       - name: Check out repository
@@ -171,6 +184,10 @@ jobs:
             fi
           done
 
+          if [[ "${LLM_ENABLED,,}" == "true" && -z "${LLM_API_KEY}" ]]; then
+            echo "::warning::LLM_ENABLED=true but LLM_API_KEY is empty. The planner will use fallback."
+          fi
+
           endpoint="https://dagshub.com/${DAGSHUB_USERNAME}/${DAGSHUB_REPOSITORY}.s3"
           uv run dvc remote modify --local origin endpointurl "$endpoint"
           uv run dvc remote modify --local origin access_key_id "$DAGSHUB_TOKEN"
@@ -180,10 +197,13 @@ jobs:
         run: uv run dvc pull -r origin
 
       - name: Run local pipeline
-        run: make pipeline INPUT="${{ needs.detect-input.outputs.incoming_path }}"
-
-      - name: Compare registered candidate
-        run: make compare-model
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ inputs.force_retrain }}" == "true" ]]; then
+            make pipeline INPUT="${{ needs.detect-input.outputs.incoming_path }}" FORCE_RETRAIN=1
+          else
+            make pipeline INPUT="${{ needs.detect-input.outputs.incoming_path }}"
+          fi
 
       - name: Push DVC cache
         run: uv run dvc push -r origin
@@ -211,6 +231,8 @@ jobs:
             reports/data-profile/
             reports/drift/
             artifacts/metrics/
+            artifacts/experiment-plans/
+            artifacts/agent/
           if-no-files-found: warn
 
   commit-metadata:
@@ -243,7 +265,7 @@ jobs:
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add dvc.lock data reports
+          git add dvc.lock data reports artifacts
 
           if git diff --cached --quiet; then
             echo "No DVC metadata changes to commit."

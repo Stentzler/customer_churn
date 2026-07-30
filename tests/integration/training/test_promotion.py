@@ -54,6 +54,8 @@ def test_compare_only_reports_and_promote_updates_champion_alias(
         policy=_permissive_policy(),
         tracking_path=fixture["tracking_path"],
         output_path=tmp_path / "promotion-report-only.json",
+        fixed_test_path=fixture["fixed_test_path"],
+        params_path=fixture["params_path"],
         promote=False,
     )
 
@@ -70,6 +72,8 @@ def test_compare_only_reports_and_promote_updates_champion_alias(
         policy=_permissive_policy(),
         tracking_path=fixture["tracking_path"],
         output_path=tmp_path / "promotion.json",
+        fixed_test_path=fixture["fixed_test_path"],
+        params_path=fixture["params_path"],
         promote=True,
     )
 
@@ -82,6 +86,9 @@ def test_compare_only_reports_and_promote_updates_champion_alias(
     assert str(champion.version) == tracking.registered_model_version
     assert report["candidate_version"] == tracking.registered_model_version
     assert report["promoted"] is True
+    assert report["api_compatible"] is True
+    assert len(report["fixed_test_data_version"]) == 64
+    assert report["candidate_metrics"] != report["candidate_validation_metrics"]
 
 
 def _build_tracking_fixture(tmp_path: Path) -> dict[str, Path]:
@@ -96,6 +103,15 @@ def _build_tracking_fixture(tmp_path: Path) -> dict[str, Path]:
     curated_directory.mkdir()
     curated_path = curated_directory / "training.csv"
     dataframe.to_csv(curated_path, index=False)
+    fixed_test = generate_valid_customer_dataframe(
+        row_count=300,
+        seed=392,
+        contract=load_data_contract(params_path),
+    )
+    fixed_test_directory = tmp_path / "test"
+    fixed_test_directory.mkdir()
+    fixed_test_path = fixed_test_directory / "fixed_test.csv"
+    fixed_test.to_csv(fixed_test_path, index=False)
 
     plan_path = write_experiment_plan(
         build_fallback_plan(settings),
@@ -128,6 +144,7 @@ def _build_tracking_fixture(tmp_path: Path) -> dict[str, Path]:
 
     return {
         "drift_directory": drift_directory,
+        "fixed_test_path": fixed_test_path,
         "metrics_directory": metrics_directory,
         "model_directory": model_directory,
         "params_path": params_path,

@@ -33,6 +33,10 @@ def test_write_agent_analysis_creates_markdown_report(tmp_path: Path) -> None:
         metrics_directory / "logistic_regression.json",
         _candidate("logistic_regression", 0.91),
     )
+    _write_json(
+        metrics_directory / "promotion.json",
+        _promotion(promoted=True, passed=True),
+    )
     output_path = tmp_path / "agent" / "agent-analysis.md"
 
     result_path = write_agent_analysis(
@@ -40,7 +44,6 @@ def test_write_agent_analysis_creates_markdown_report(tmp_path: Path) -> None:
         trace_path=trace_path,
         profile_path=profile_path,
         metrics_directory=metrics_directory,
-        promotion_path=tmp_path / "missing-promotion.json",
         output_path=output_path,
     )
 

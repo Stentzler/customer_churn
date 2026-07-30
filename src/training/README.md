@@ -1,9 +1,10 @@
 # Deterministic Training Guide
 
-This document explains the complete local model-training subsystem for the
+This document explains the complete model-training and promotion subsystem for the
 customer-churn project. It covers experiment planning, deterministic validation,
 data splitting, leakage-safe preprocessing, candidate fitting, evaluation,
-selection, failure isolation, artifact persistence, and DVC reproducibility.
+selection, failure isolation, artifact persistence, MLflow registration,
+fixed-test comparison, and controlled champion promotion.
 
 Model sophistication is intentionally secondary. The purpose is to demonstrate an
 auditable operational path from versioned data and configuration to independently
@@ -27,6 +28,8 @@ The training implementation protects these rules:
 12. No selection occurs when successful candidates fall below policy.
 13. Model and JSON writes are atomic.
 14. DVC tracks code, configuration, data, plans, models, and metrics.
+15. Promotion evaluates the candidate and champion on the same immutable test set.
+16. Promotion requires a loadable artifact compatible with the FastAPI contract.
 
 ## Lifecycle
 
@@ -76,6 +79,15 @@ stratified train/validation split |
                   |
                   v
        deterministic candidate selection
+                  |
+                  v
+       MLflow tracking and registration
+                  |
+                  v
+ immutable fixed-test and API compatibility gates
+                  |
+                  v
+        manually approved champion alias
 ```
 
 ## Source Responsibilities
@@ -88,6 +100,8 @@ stratified train/validation split |
 | `train.py` | Load data, split, fit candidates, isolate failures, and orchestrate CLI execution |
 | `evaluate.py` | Calculate metrics and select the winner deterministically |
 | `artifacts.py` | Atomically persist pipelines, metrics, failures, and selection |
+| `registry.py` | Log candidate runs and register the selected model in MLflow |
+| `compare.py` | Evaluate fixed-test, artifact, API, and champion-comparison gates |
 | `../agent/schemas.py` | Define strict Pydantic experiment-plan contracts |
 | `../agent/planner.py` | Build and persist the deterministic fallback plan |
 | `../agent/plan_validator.py` | Approve or reject an untrusted structured plan |
@@ -317,9 +331,9 @@ Pipeline
   classifier: LogisticRegression or RandomForestClassifier
 ```
 
-Saving the complete pipeline prevents training-serving skew. The future API will
-send raw validated features to `pipeline.predict()` and `pipeline.predict_proba()`;
-it will not reimplement scaling or encoding.
+Saving the complete pipeline prevents training-serving skew. FastAPI sends raw
+validated features to `pipeline.predict()` and `pipeline.predict_proba()`; it does
+not reimplement scaling or encoding.
 
 ## Candidate Evaluation
 
@@ -395,6 +409,36 @@ Logistic Regression wins because `roc_auc` is the primary metric.
 
 These are validation metrics, not immutable fixed-test results and not a promotion
 decision.
+
+## Fixed-Test Promotion
+
+Candidate selection and champion promotion intentionally use different data:
+
+```text
+curated training data
+  -> train/validation split
+  -> choose the best candidate using validation metrics
+  -> register that selected candidate
+  -> evaluate the registered candidate on data/test/fixed_test.csv
+  -> compare with the champion on the same fixed test
+```
+
+The fixed-test dataset is never used to fit preprocessing, tune parameters, or
+choose between candidates. It is loaded only after selection and registration,
+then validated against the same data contract. Its SHA-256 content hash is written
+as `fixed_test_data_version` in `artifacts/metrics/promotion.json`.
+
+Promotion gates require:
+
+- Fixed-test ROC-AUC, F1, and recall at or above `params.yaml` thresholds.
+- The registered artifact to load successfully from MLflow.
+- A real prediction through the shared FastAPI request and prediction contract.
+- When a champion exists, the required fixed-test ROC-AUC improvement over it.
+
+The report keeps `candidate_metrics` and `champion_metrics` for fixed-test
+results. It separately keeps `candidate_validation_metrics` and
+`champion_validation_metrics` for lineage and diagnosis. Passing comparison does
+not move the alias; only the explicit manual promotion command may do that.
 
 ## Candidate Failure Isolation
 
@@ -631,7 +675,7 @@ using the fixed-test dataset.
 
 Implemented:
 
-- Deterministic local planning.
+- Optional provider-based planning with deterministic fallback.
 - Plan validation and catalog constraints.
 - Leakage-safe candidate training.
 - Validation metrics and selection.
@@ -644,15 +688,12 @@ Implemented:
 - Selected-candidate model registration.
 - Model-version lineage tags.
 - Local CSV-to-registration orchestration.
+- Drift-based training routing with an explicit manual override.
 - Deterministic promotion comparison.
+- Immutable fixed-test promotion evaluation.
+- Registered-artifact loading and FastAPI contract checks.
 - Manual champion alias promotion.
-
-Not implemented yet:
-
-- Fixed-test promotion comparison.
-- Prediction-threshold optimization.
-- LLM-generated plans and automatic fallback routing.
-- FastAPI serving and Docker publication.
+- FastAPI serving of the `champion` alias.
 
 Registration intentionally creates a candidate model version with
 `candidate_status=selected_not_promoted`. Promotion comparison writes
@@ -671,6 +712,10 @@ registration fails, the command returns a nonzero status. DagsHub registration i
 also skipped when the curated profile has the same `data_version` recorded by the
 last successful tracking receipt in
 `artifacts/metrics/mlflow-tracking.json`.
+
+Without significant feature drift, the normal pipeline stops after persisting its
+quality and drift artifacts. Use `FORCE_RETRAIN=1` only for an intentional manual
+rehearsal or override.
 
 Compare the latest registered candidate without moving the alias:
 

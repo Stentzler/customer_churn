@@ -87,6 +87,22 @@ def test_local_acceptance_uses_local_mlflow_and_does_not_push_by_default(
 
     assert result is LocalPipelineStatus.REGISTERED
     assert calls[0]["env_path"] == tmp_path / "local.env"
+    assert calls[0]["force_retrain"] is True
+
+
+def test_local_mlflow_environment_disables_optional_llm(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("LLM_ENABLED", "true")
+
+    env_path = local_acceptance.write_local_mlflow_env(
+        output_path=tmp_path / "local.env",
+        backend_path=tmp_path / "mlflow.db",
+    )
+
+    assert "LLM_ENABLED=false" in env_path.read_text(encoding="utf-8")
+    assert local_acceptance.os.environ["LLM_ENABLED"] == "false"
 
 
 def test_remote_acceptance_uses_env_and_pushes_dvc(

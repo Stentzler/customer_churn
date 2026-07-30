@@ -17,6 +17,14 @@ from enum import StrEnum
 from pathlib import Path
 from typing import cast
 
+from src.agent.analyst import (
+    DEFAULT_OUTPUT_PATH as DEFAULT_ANALYSIS_OUTPUT_PATH,
+)
+from src.agent.analyst import (
+    DEFAULT_TRACE_PATH,
+    AgentAnalysisError,
+    write_agent_analysis,
+)
 from src.data.drift import DataDriftError, analyze_drift
 from src.data.ingest import (
     BatchDisposition,
@@ -25,6 +33,14 @@ from src.data.ingest import (
 )
 from src.data.settings import DataContractConfigurationError
 from src.data.validate import DataValidationOperationalError
+from src.training.compare import (
+    DEFAULT_FIXED_TEST_PATH,
+    DEFAULT_PROMOTION_OUTPUT_PATH,
+    PromotionConfigurationError,
+    PromotionError,
+    compare_and_maybe_promote,
+    load_promotion_policy,
+)
 from src.training.registry import (
     DEFAULT_DRIFT_DIRECTORY,
     DEFAULT_ENV_PATH,
@@ -55,6 +71,7 @@ class LocalPipelineStatus(StrEnum):
     """Terminal outcomes exposed to local automation and future CI."""
 
     REGISTERED = "registered"
+    SKIPPED_NO_SIGNIFICANT_DRIFT = "skipped_no_significant_drift"
     SKIPPED_UNCHANGED = "skipped_unchanged"
     REJECTED = "rejected"
 
@@ -68,6 +85,7 @@ class LocalPipelineResult:
     data_version: str | None
     registered_model_name: str | None = None
     registered_model_version: str | None = None
+    promotion_passed: bool | None = None
 
 
 def run_local_pipeline(
@@ -82,8 +100,13 @@ def run_local_pipeline(
     model_directory: Path = DEFAULT_MODEL_DIRECTORY,
     metrics_directory: Path = DEFAULT_METRICS_DIRECTORY,
     plan_path: Path = DEFAULT_PLAN_PATH,
+    planner_trace_path: Path = DEFAULT_TRACE_PATH,
     tracking_output_path: Path = DEFAULT_OUTPUT_PATH,
+    promotion_output_path: Path = DEFAULT_PROMOTION_OUTPUT_PATH,
+    analysis_output_path: Path = DEFAULT_ANALYSIS_OUTPUT_PATH,
+    fixed_test_path: Path = DEFAULT_FIXED_TEST_PATH,
     dvc_command_runner: DvcCommandRunner | None = None,
+    force_retrain: bool = False,
 ) -> LocalPipelineResult:
     """Process one batch and register a model only for a new curated data version.
 
@@ -119,10 +142,17 @@ def run_local_pipeline(
         drift_json_path=drift_artifacts.json_path,
         drift_html_path=drift_artifacts.html_path,
     )
+    if not drift_artifacts.result.feature_drift.is_significant and not force_retrain:
+        return LocalPipelineResult(
+            status=LocalPipelineStatus.SKIPPED_NO_SIGNIFICANT_DRIFT,
+            input_path=input_path,
+            data_version=drift_artifacts.result.current_data_version,
+        )
 
     previous_data_version = _read_optional_data_version(tracking_output_path)
-    # Profile, train, and agent analysis are explicit sibling DVC targets.
-    command_runner(("repro", "profile", "train", "agent_analysis"))
+    command_runner(("repro", "profile"))
+    command_runner(("repro", "--force", "fallback_plan"))
+    command_runner(("repro", "train"))
     current_data_version = _read_required_data_version(profile_path)
 
     if current_data_version == previous_data_version:
@@ -143,12 +173,32 @@ def run_local_pipeline(
         drift_directory=drift_directory,
         output_path=tracking_output_path,
     )
+    promotion = compare_and_maybe_promote(
+        tracking_uri=settings.tracking_uri,
+        registered_model_name=tracking.registered_model_name,
+        policy=load_promotion_policy(params_path),
+        tracking_path=tracking_output_path,
+        output_path=promotion_output_path,
+        fixed_test_path=fixed_test_path,
+        params_path=params_path,
+        candidate_version=tracking.registered_model_version,
+        promote=False,
+    )
+    write_agent_analysis(
+        plan_path=plan_path,
+        trace_path=planner_trace_path,
+        profile_path=profile_path,
+        metrics_directory=metrics_directory,
+        promotion_path=promotion_output_path,
+        output_path=analysis_output_path,
+    )
     return LocalPipelineResult(
         status=LocalPipelineStatus.REGISTERED,
         input_path=input_path,
         data_version=current_data_version,
         registered_model_name=tracking.registered_model_name,
         registered_model_version=tracking.registered_model_version,
+        promotion_passed=promotion.passed,
     )
 
 
@@ -229,6 +279,11 @@ def _build_argument_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--params", type=Path, default=DEFAULT_PARAMS_PATH)
     parser.add_argument("--env", type=Path, default=DEFAULT_ENV_PATH)
+    parser.add_argument(
+        "--force-retrain",
+        action="store_true",
+        help="Run training even when feature drift is not significant.",
+    )
     return parser
 
 
@@ -248,14 +303,18 @@ def main(arguments: Sequence[str] | None = None) -> int:
             args.input,
             params_path=args.params,
             env_path=args.env,
+            force_retrain=args.force_retrain,
         )
     except (
         DataContractConfigurationError,
         DataDriftError,
         DataValidationOperationalError,
+        AgentAnalysisError,
         ExperimentTrackingError,
         IncomingBatchOperationalError,
         LocalPipelineError,
+        PromotionConfigurationError,
+        PromotionError,
         TrackingConfigurationError,
     ) as error:
         LOGGER.error("local_pipeline_failed reason=%s", error)
@@ -266,12 +325,13 @@ def main(arguments: Sequence[str] | None = None) -> int:
     )
     log_method(
         "local_pipeline_completed status=%s input=%s data_version=%s "
-        "model=%s model_version=%s",
+        "model=%s model_version=%s promotion_passed=%s",
         result.status.value,
         result.input_path,
         result.data_version,
         result.registered_model_name,
         result.registered_model_version,
+        result.promotion_passed,
     )
     return 1 if result.status is LocalPipelineStatus.REJECTED else 0
 
