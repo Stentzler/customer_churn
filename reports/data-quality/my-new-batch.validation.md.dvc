@@ -1,0 +1,5 @@
+outs:
+- md5: 6308df009262da28403b04d0d70c4b4f
+  size: 231
+  hash: md5
+  path: my-new-batch.validation.md

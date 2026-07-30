@@ -1,0 +1,5 @@
+outs:
+- md5: 6c237b97c06ce0e9894bed0f5fb0223f
+  size: 2263
+  hash: md5
+  path: my-new-batch.drift.json
