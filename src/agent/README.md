@@ -79,7 +79,7 @@ artifacts/experiment-plans/fallback.json
 artifacts/agent/planner-trace.json
 ```
 
-With the current default `.env` setting:
+With the committed `.env.example` default:
 
 ```text
 LLM_ENABLED=false

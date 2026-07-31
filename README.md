@@ -15,6 +15,7 @@ Detailed subsystem documentation:
 - [Training and MLflow guide](./src/training/README.md)
 - [FastAPI serving guide](./src/api/README.md)
 - [Agent and LLMOps guide](./src/agent/README.md)
+- [Workflow orchestration guide](./src/workflow/README.md)
 
 ## Current Lifecycle
 
@@ -74,6 +75,7 @@ Use these guides for subsystem-level details:
 | Training, model artifacts, metrics, selection, MLflow, and promotion | [Training guide](./src/training/README.md) |
 | Optional LLM planning and analysis | [Agent guide](./src/agent/README.md) |
 | Local model serving | [FastAPI guide](./src/api/README.md) |
+| Local and GitHub lifecycle orchestration | [Workflow guide](./src/workflow/README.md) |
 
 ## Development
 
@@ -183,7 +185,7 @@ This repository uses four different systems together:
 | System | What it stores | What it is used for |
 |---|---|---|
 | Git / GitHub | Source code, configs, tests, docs, `dvc.yaml`, `dvc.lock`, and small `.dvc` pointer files | Code review, history, collaboration, and GitHub Actions automation |
-| DVC | Real generated datasets, reports, profiles, and model artifacts in `.dvc/cache/` or the DagsHub DVC remote | Versioning large or generated files without committing them directly to Git |
+| DVC | Declared pipeline outputs and files explicitly added with `dvc add`, stored in `.dvc/cache/` or the DagsHub DVC remote | Versioning large or generated files without committing them directly to Git |
 | MLflow | Experiment runs, metrics, parameters, artifacts, and registered model versions | Tracking what was trained and keeping model lineage |
 | DagsHub | Provides DVC remote storage and MLflow tracking/registry linked to the project | One place to inspect data versions, experiment runs, and registered models |
 
@@ -268,6 +270,10 @@ select the candidate during training. `candidate_metrics` records a fresh
 evaluation on `data/test/fixed_test.csv`; these fixed-test values, artifact
 loadability, API request compatibility, and comparison with the current champion
 control promotion eligibility.
+
+`promotion.json` is a run-specific operational artifact, not a declared DVC output.
+Locally it remains ignored by Git. In GitHub Actions it is retained inside the
+downloadable workflow artifact, so neither `git pull` nor `dvc pull` restores it.
 
 The comparison can also be rerun without moving the alias:
 
@@ -386,6 +392,12 @@ git commit -m "Add drifted incoming customer batch"
 git push
 ```
 
+Automatic detection accepts exactly one incoming CSV across the complete Git push,
+not one CSV per commit. If two incoming pointer commits are pushed together, the
+workflow stops rather than guessing which batch to process. Process each delivery
+with a separate push, or recover by manually running **Data Pipeline** once for each
+explicit `incoming_path`.
+
 `--scenario normal` samples from the reference distribution and will usually stop
 after drift reporting. `--scenario drifted` applies the project's configured
 range-relative shifts to three of eight features. With the current `0.25` gate,
@@ -429,13 +441,21 @@ artifacts/agent/
 
 This is where you inspect validation results, drift decisions, training metrics,
 MLflow tracking receipts, the LLM or fallback experiment plan, and the agent
-analysis report for that run.
+analysis report. Because the runner performs `dvc pull` before execution and the
+artifact uploads complete directories, the bundle can also contain historical DVC
+outputs. Match the validation and drift filenames to the submitted batch, and use
+`data_version`, `git_commit`, and `registered_model_version` to identify current
+training outputs.
 
 Manual champion promotion lives in `.github/workflows/promote-model.yml`. Run it
 from the GitHub Actions UI with the registered model version you want to promote.
 That workflow pulls the immutable fixed-test data from DVC, reloads the requested
 registry artifact, re-checks fixed-test thresholds and FastAPI compatibility, and
 moves the MLflow `champion` alias only if the candidate still passes.
+
+The manual workflow publishes a separate Actions artifact named
+`promotion-report`. Download it from the workflow run's **Summary** page and inspect
+`artifacts/metrics/promotion.json`. This report is not restored by Git or DVC.
 
 The workflow uses GitHub Secrets instead of `.env`:
 

@@ -1046,8 +1046,17 @@ git diff -- params.yaml dvc.lock
 
 ### Create an Additional Ad Hoc Batch
 
-The current CLI writes stable predefined filenames. To create a separately named
-synthetic delivery with the existing Python API:
+The batch helper is the preferred interface for creating a separately named
+synthetic delivery:
+
+```bash
+make create-incoming-batch ARGS="--scenario normal --filename batch-001.csv"
+make create-incoming-batch ARGS="--scenario drifted --filename drifted-batch-001.csv"
+```
+
+It writes only the CSV under `data/incoming/`; validation, DVC tracking, and training
+do not run until a pipeline command is executed. The lower-level Python API remains
+available for studying generation directly:
 
 ```bash
 uv run python -c "
@@ -1073,15 +1082,9 @@ Process and analyze it:
 make pipeline INPUT=data/incoming/batch-001.csv
 ```
 
-For the GitHub lifecycle, the batch helper can generate either distribution:
-
-```bash
-# Usually validates and stops after a no-significant-drift result.
-make create-incoming-batch ARGS="--scenario normal --filename normal-batch-001.csv"
-
-# Shifts three features and is designed to cross the 0.25 feature-drift gate.
-make create-incoming-batch ARGS="--scenario drifted --filename drifted-batch-001.csv"
-```
+For the GitHub lifecycle, `normal` usually stops after a
+no-significant-feature-drift result. The `drifted` scenario shifts three features
+and is designed to cross the configured `0.25` feature-drift-share gate.
 
 Use a unique seed for each delivery when passing `--seed` explicitly. The seed is
 embedded in `customer_id`; reusing it can cause curation to replace existing rows

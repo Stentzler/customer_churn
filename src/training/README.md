@@ -129,6 +129,12 @@ training:
       n_estimators: 200
       max_depth: 8
       min_samples_leaf: 2
+
+promotion:
+  minimum_roc_auc: 0.80
+  minimum_f1: 0.70
+  minimum_recall: 0.65
+  minimum_roc_auc_improvement: 0.005
 ```
 
 `maximum_candidates` limits resource usage. `minimum_successful_candidates`
@@ -137,6 +143,8 @@ one, either model may fail while the other remains eligible.
 
 `primary_metric` controls candidate ranking. It cannot be changed by an experiment
 plan. This prevents an LLM or edited artifact from changing policy indirectly.
+The promotion section is a separate policy applied later to the selected registered
+candidate on the immutable fixed-test dataset.
 
 ## Structured Experiment Plans
 
@@ -149,7 +157,7 @@ artifacts/experiment-plans/fallback.json
 It contains:
 
 - Schema version.
-- Auditable source (`fallback` or eventually `llm`).
+- Auditable source (`fallback` or `llm`).
 - Primary metric.
 - Ordered experiments.
 - Algorithm identifiers.
@@ -398,15 +406,17 @@ Candidates are sorted by:
 The final name tie-breaker makes selection independent of input ordering. The LLM
 never chooses the winner.
 
-Current results are approximately:
+Results change as accepted data changes. Inspect the current deterministic outputs
+instead of relying on a hard-coded snapshot:
 
-| Model | ROC-AUC | PR-AUC | F1 | Precision | Recall |
-|---|---:|---:|---:|---:|---:|
-| Logistic Regression | 0.8979 | 0.7873 | 0.6746 | 0.5700 | 0.8261 |
-| Random Forest | 0.8676 | 0.7320 | 0.6846 | 0.6375 | 0.7391 |
+```bash
+cat artifacts/metrics/selection.json
+cat artifacts/metrics/logistic_regression.json
+cat artifacts/metrics/random_forest.json
+```
 
-Logistic Regression wins because `roc_auc` is the primary metric.
-
+`selection.json` identifies the winner and selected primary-metric value. Candidate
+files contain ROC-AUC, PR-AUC, F1, precision, recall, and confusion-matrix results.
 These are validation metrics, not immutable fixed-test results and not a promotion
 decision.
 
@@ -434,6 +444,18 @@ Promotion gates require:
 - The registered artifact to load successfully from MLflow.
 - A real prediction through the shared FastAPI request and prediction contract.
 - When a champion exists, the required fixed-test ROC-AUC improvement over it.
+
+The relative improvement is an absolute ROC-AUC difference:
+
+```text
+candidate ROC-AUC - champion ROC-AUC >= minimum_roc_auc_improvement
+```
+
+ROC-AUC cannot exceed `1.0`. A configured improvement can therefore become
+unreachable when the champion is already near `1.0`. For example, a champion above
+`0.995` cannot be beaten by `0.005`. This does not bypass the gate: the candidate is
+registered for traceability and rejected. Any threshold adjustment is a versioned
+policy decision in `params.yaml`, not a manual promotion override.
 
 The report keeps `candidate_metrics` and `champion_metrics` for fixed-test
 results. It separately keeps `candidate_validation_metrics` and
