@@ -1,0 +1,5 @@
+outs:
+- md5: 4ed7e89b9d1ef2a0d49b8c97c91aaab0
+  size: 13345
+  hash: md5
+  path: drifted-batch-002.csv
