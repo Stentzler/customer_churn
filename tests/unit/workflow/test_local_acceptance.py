@@ -1,8 +1,10 @@
 from pathlib import Path
 from types import SimpleNamespace
 
+import pandas as pd
 import pytest
 from scripts import local_acceptance
+from src.data.generate import DatasetScenario
 from src.workflow.local_pipeline import LocalPipelineStatus
 
 
@@ -39,6 +41,32 @@ def test_acceptance_batch_rejects_nested_filename(tmp_path: Path) -> None:
             params_path=Path("params.yaml"),
             data_root=tmp_path / "data",
         )
+
+
+def test_drifted_acceptance_batch_shifts_expected_features(tmp_path: Path) -> None:
+    normal_path = local_acceptance.write_acceptance_batch(
+        rows=200,
+        seed=2026073002,
+        filename="normal.csv",
+        params_path=Path("params.yaml"),
+        data_root=tmp_path / "normal-data",
+    )
+    drifted_path = local_acceptance.write_acceptance_batch(
+        rows=200,
+        seed=2026073002,
+        filename="drifted.csv",
+        params_path=Path("params.yaml"),
+        data_root=tmp_path / "drifted-data",
+        scenario=DatasetScenario.DRIFTED,
+    )
+
+    normal = pd.read_csv(normal_path)
+    drifted = pd.read_csv(drifted_path)
+
+    assert drifted["customer_id"].tolist() == normal["customer_id"].tolist()
+    assert drifted["monthly_spend"].mean() > normal["monthly_spend"].mean()
+    assert drifted["support_tickets_90d"].mean() > normal["support_tickets_90d"].mean()
+    assert drifted["usage_hours_monthly"].mean() < normal["usage_hours_monthly"].mean()
 
 
 def test_local_acceptance_uses_local_mlflow_and_does_not_push_by_default(
@@ -212,6 +240,8 @@ def test_create_only_cli_does_not_run_pipeline(
             "2026073001",
             "--filename",
             "batch.csv",
+            "--scenario",
+            "drifted",
             "--data-root",
             str(tmp_path / "data"),
         ]
@@ -219,3 +249,4 @@ def test_create_only_cli_does_not_run_pipeline(
 
     assert status_code == 0
     assert created[0]["filename"] == "batch.csv"
+    assert created[0]["scenario"] is DatasetScenario.DRIFTED

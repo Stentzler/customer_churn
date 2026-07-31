@@ -75,7 +75,7 @@ def generate_synthetic_dataset(
     if scenario is DatasetScenario.DRIFTED:
         # Keep labels unchanged so this remains the project's feature-only drift
         # demonstration. Target drift is measured separately by the pipeline.
-        return _apply_feature_drift(dataframe, contract)
+        return apply_feature_drift(dataframe, contract)
     if scenario is DatasetScenario.INVALID:
         return _apply_contract_violations(dataframe, contract)
     return dataframe
@@ -251,11 +251,15 @@ def _row_count_for(
     return generation.batch_rows
 
 
-def _apply_feature_drift(
+def apply_feature_drift(
     dataframe: pd.DataFrame,
     contract: DataContractConfig,
 ) -> pd.DataFrame:
-    """Shift selected feature distributions while preserving the data contract."""
+    """Shift three feature distributions while preserving the data contract.
+
+    The transformation is public so ad hoc incoming batches can use exactly the
+    same deterministic drift scenario as the predefined DataOps fixture.
+    """
 
     drifted = dataframe.copy()
     spend_range = contract.numeric_ranges["monthly_spend"]

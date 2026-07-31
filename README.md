@@ -371,26 +371,34 @@ the real CSV during the workflow.
 A typical GitHub-triggered flow is:
 
 ```bash
-# Create only a new incoming CSV. This does not validate, train, or register.
-make create-incoming-batch ARGS="--filename my-new-batch.csv"
+# Create a uniquely seeded drifted CSV. This does not validate or train yet.
+make create-incoming-batch ARGS="--scenario drifted --filename drifted-batch-001.csv"
 
 # Store the real CSV in the local DVC cache and create the Git-visible pointer.
-uv run dvc add data/incoming/my-new-batch.csv
+uv run dvc add data/incoming/drifted-batch-001.csv
 
 # Send the real CSV to the DagsHub DVC remote so GitHub Actions can pull it.
 uv run dvc push -r origin
 
 # Commit only the pointer file. The raw CSV remains ignored by Git.
-git add data/incoming/my-new-batch.csv.dvc
-git commit -m "Add incoming customer batch"
+git add data/incoming/drifted-batch-001.csv.dvc
+git commit -m "Add drifted incoming customer batch"
 git push
 ```
+
+`--scenario normal` samples from the reference distribution and will usually stop
+after drift reporting. `--scenario drifted` applies the project's configured
+range-relative shifts to three of eight features. With the current `0.25` gate,
+two drifted features are sufficient, so this scenario is designed to open the
+automatic training path. The command's timestamp-based default seed keeps customer
+identifiers unique; when supplying `--seed` yourself, use a value not used by an
+earlier batch.
 
 The push can trigger the workflow automatically on `main`. You can also run the
 workflow manually and use:
 
 ```text
-data/incoming/my-new-batch.csv
+data/incoming/drifted-batch-001.csv
 ```
 
 The workflow is split into clear jobs:

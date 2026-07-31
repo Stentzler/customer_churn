@@ -15,7 +15,11 @@ from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 
-from src.data.generate import generate_valid_customer_dataframe
+from src.data.generate import (
+    DatasetScenario,
+    apply_feature_drift,
+    generate_valid_customer_dataframe,
+)
 from src.data.settings import (
     DataContractConfigurationError,
     load_data_contract,
@@ -32,6 +36,10 @@ from src.workflow.local_pipeline import (
 LOGGER = logging.getLogger(__name__)
 DEFAULT_LOCAL_ENV_PATH = Path(".tmp/local-acceptance.env")
 DEFAULT_LOCAL_MLFLOW_BACKEND = Path(".tmp/mlflow/local-acceptance.db")
+SUPPORTED_BATCH_SCENARIOS = (
+    DatasetScenario.NORMAL,
+    DatasetScenario.DRIFTED,
+)
 
 
 class LocalAcceptanceError(RuntimeError):
@@ -47,6 +55,7 @@ def run_acceptance_scenario(
     data_root: Path,
     remote: bool,
     push_dvc: bool,
+    scenario: DatasetScenario = DatasetScenario.NORMAL,
 ) -> LocalPipelineStatus:
     """Create one valid incoming batch and run it through the local lifecycle."""
 
@@ -56,6 +65,7 @@ def run_acceptance_scenario(
         filename=filename,
         params_path=params_path,
         data_root=data_root,
+        scenario=scenario,
     )
     env_path = Path(".env") if remote else write_local_mlflow_env()
     result = run_local_pipeline(
@@ -92,6 +102,7 @@ def write_acceptance_batch(
     filename: str | None,
     params_path: Path,
     data_root: Path,
+    scenario: DatasetScenario = DatasetScenario.NORMAL,
 ) -> Path:
     """Generate a valid CSV delivery under ``data/incoming``.
 
@@ -100,6 +111,10 @@ def write_acceptance_batch(
     away as an already-seen batch.
     """
 
+    if scenario not in SUPPORTED_BATCH_SCENARIOS:
+        raise LocalAcceptanceError(
+            "Acceptance batch scenario must be 'normal' or 'drifted'"
+        )
     contract = load_data_contract(params_path)
     try:
         dataframe = generate_valid_customer_dataframe(
@@ -107,6 +122,8 @@ def write_acceptance_batch(
             seed=seed,
             contract=contract,
         )
+        if scenario is DatasetScenario.DRIFTED:
+            dataframe = apply_feature_drift(dataframe, contract)
     except ValueError as error:
         raise LocalAcceptanceError(
             f"Invalid acceptance generation settings: {error}"
@@ -135,7 +152,8 @@ def write_acceptance_batch(
         ) from error
 
     LOGGER.info(
-        "acceptance_batch_created rows=%d seed=%d path=%s",
+        "acceptance_batch_created scenario=%s rows=%d seed=%d path=%s",
+        scenario.value,
         len(dataframe),
         seed,
         output_path,
@@ -216,6 +234,12 @@ def _build_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument("--params", type=Path, default=DEFAULT_PARAMS_PATH)
     parser.add_argument("--data-root", type=Path, default=DEFAULT_DATA_ROOT)
     parser.add_argument(
+        "--scenario",
+        choices=[scenario.value for scenario in SUPPORTED_BATCH_SCENARIOS],
+        default=DatasetScenario.NORMAL.value,
+        help="Generate a normal or significantly drifted valid batch.",
+    )
+    parser.add_argument(
         "--remote",
         action="store_true",
         help="Use .env and real MLflow/DagsHub tracking instead of local SQLite.",
@@ -246,6 +270,7 @@ def main(arguments: Sequence[str] | None = None) -> int:
                 filename=args.filename,
                 params_path=args.params,
                 data_root=args.data_root,
+                scenario=DatasetScenario(args.scenario),
             )
             return 0
         run_acceptance_scenario(
@@ -256,6 +281,7 @@ def main(arguments: Sequence[str] | None = None) -> int:
             data_root=args.data_root,
             remote=args.remote,
             push_dvc=args.push_dvc,
+            scenario=DatasetScenario(args.scenario),
         )
     except (
         DataContractConfigurationError,

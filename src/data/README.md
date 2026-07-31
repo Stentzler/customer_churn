@@ -1073,6 +1073,20 @@ Process and analyze it:
 make pipeline INPUT=data/incoming/batch-001.csv
 ```
 
+For the GitHub lifecycle, the batch helper can generate either distribution:
+
+```bash
+# Usually validates and stops after a no-significant-drift result.
+make create-incoming-batch ARGS="--scenario normal --filename normal-batch-001.csv"
+
+# Shifts three features and is designed to cross the 0.25 feature-drift gate.
+make create-incoming-batch ARGS="--scenario drifted --filename drifted-batch-001.csv"
+```
+
+Use a unique seed for each delivery when passing `--seed` explicitly. The seed is
+embedded in `customer_id`; reusing it can cause curation to replace existing rows
+instead of increasing the effective training dataset.
+
 The local orchestrator performs these operations in order:
 
 1. Validate the exact input path and write JSON and Markdown quality reports.
