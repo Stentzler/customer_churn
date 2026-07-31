@@ -1,0 +1,5 @@
+outs:
+- md5: b0dca5be8a75d1140ea16217bdbcbcbd
+  size: 4042536
+  hash: md5
+  path: drifted-batch-003.drift.html

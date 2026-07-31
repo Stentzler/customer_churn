@@ -1,0 +1,5 @@
+outs:
+- md5: 5770b5adb86af30a5fa03932735747d3
+  size: 2324
+  hash: md5
+  path: drifted-batch-003.drift.json
