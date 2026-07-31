@@ -1,0 +1,5 @@
+outs:
+- md5: 68cca4312a57c420dc6bcacf4a31c3fc
+  size: 236
+  hash: md5
+  path: drifted-batch-001.validation.md
